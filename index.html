@@ -57,7 +57,31 @@
     progress::-webkit-progress-value { background: #137d69; border-radius: 9px; }
     .message { font-size: 13px; line-height: 1.5; color: #137d69; margin: 12px 0 0; overflow-wrap: anywhere; }
     .message.error { color: #b13d3d; }
+    .quality { margin-top: 12px; border-top: 1px solid #e6ece8; padding-top: 12px; color: #526b5c; font-size: 13px; line-height: 1.65; }
+    .quality summary { cursor: pointer; font-weight: 600; min-height: 30px; }
+    .quality.needs-review summary { color: #946017; }
+    .quality p { margin: 6px 0; }
+    .quality ul { padding-left: 22px; margin: 8px 0; max-height: 190px; overflow: auto; }
+    .review-note { padding: 10px 18px; color: #687d6f; background: #f8faf9; border-top: 1px solid #e6ece8; font-size: 12px; line-height: 1.6; }
+    .progress-status { display: flex; align-items: center; gap: 12px; }
+    #cancel { min-height: 32px; padding: 4px 10px; font-size: 12px; }
     .start-hint { color: #7b8a80; font-size: 13px; text-align: center; margin: 28px 0; }
+    .batch-panel { margin-top: 20px; padding: 16px; border: 1px solid #dfe7e2; border-radius: 14px; background: #fff; }
+    .batch-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 13px; }
+    .batch-header p { margin: 5px 0 0; font-size: 12px; color: #6d8073; }
+    .document-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 9px; max-height: 300px; overflow: auto; }
+    .document-item { display: flex; align-items: center; min-width: 0; background: #f8faf9; border: 1px solid #e2e9e4; border-radius: 9px; }
+    .document-item.selected { border-color: #137d69; background: #edf7f1; }
+    .document-select { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; padding: 12px; border: 0; background: transparent; color: #294536; text-align: left; border-radius: 9px; }
+    .document-title { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 650; }
+    .document-status { font-size: 12px; color: #687e70; }
+    .document-item.error .document-status, .document-item.partial .document-status, .document-item.review .document-status { color: #a05c30; }
+    .viewer-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin: 24px 2px -8px; color: #3e5d4b; }
+    .viewer-heading h2 { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+    .viewer-heading span { font-size: 12px; color: #6d8073; }
+    .page-controls select { width: 108px; min-height: 36px; padding: 5px 8px; font-size: 12px; }
+    #page-position { display: none; }
+    @media (max-width: 700px) { .batch-panel { padding: 12px; } .document-list { grid-template-columns: 1fr; max-height: 270px; } .page-controls select { min-height: 44px; } }
     .workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 22px; align-items: stretch; scroll-margin-top: 18px; }
     .card { display: flex; flex-direction: column; min-width: 0; background: #fff; border: 1px solid #dfe7e2; border-radius: 14px; overflow: hidden; }
     .card-header { display: flex; justify-content: space-between; align-items: center; min-height: 70px; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #e6ece8; }
@@ -103,30 +127,36 @@
   <header><div class="nav"><div class="brand"><span class="brand-icon"><svg aria-hidden="true"><use href="#i-scan"/></svg></span>TextLens</div><div class="privacy"><svg aria-hidden="true"><use href="#i-lock"/></svg><span>Your files stay in your browser</span></div></div></header>
   <main>
     <h1>Image or PDF to text</h1>
-    <p class="intro">Upload a file, extract its text, and view them side by side.</p>
+    <p class="intro">Upload images and PDFs together. Get text organized by file and page.</p>
     <section class="upload-card" id="upload-card" aria-label="Upload and extraction controls">
-      <input id="file-input" type="file" accept="image/*,.pdf,application/pdf" hidden>
+      <input id="file-input" type="file" accept="image/*,.pdf,application/pdf" multiple hidden>
       <div class="upload-controls">
         <div class="upload-file">
-          <button type="button" class="dropzone" id="dropzone" aria-label="Choose an image or PDF, or drop a file here">
+          <button type="button" class="dropzone" id="dropzone" aria-label="Choose images and PDFs, or drop files here">
             <span class="upload-icon"><svg aria-hidden="true"><use href="#i-upload"/></svg></span>
-            <span class="drop-copy"><span class="drop-title">Choose an image or PDF</span><span class="drop-subtitle">Click to browse or drag a file here</span></span>
+            <span class="drop-copy"><span class="drop-title">Choose images and PDFs</span><span class="drop-subtitle">Select multiple files or drag them here</span></span>
             <span class="browse">Browse files</span>
           </button>
           <div class="file-row" id="file-row" hidden>
             <svg aria-hidden="true"><use href="#i-file"/></svg>
             <div class="file-info"><div id="file-name" class="file-name"></div><div id="file-size" class="file-size"></div></div>
-            <button type="button" class="secondary" id="change-file">Change file</button>
-            <button type="button" class="icon-button" id="remove" aria-label="Remove selected file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+            <button type="button" class="secondary" id="change-file">Add files</button>
+            <button type="button" class="icon-button" id="remove" aria-label="Clear all files" title="Clear all files"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
           </div>
         </div>
         <div class="settings"><label for="language">Text language</label><select id="language"><option value="eng">English</option><option value="eng+hin">English + Hindi</option><option value="eng+spa">English + Spanish</option><option value="eng+fra">English + French</option><option value="eng+deu">English + German</option></select></div>
         <button type="button" class="primary" id="extract" disabled><svg aria-hidden="true"><use href="#i-scan"/></svg><span id="extract-label">Extract text</span></button>
       </div>
-      <div class="progress-wrap" id="progress-wrap" hidden><div class="progress-label"><span id="progress-label">Preparing…</span><span id="progress-percent">0%</span></div><progress id="progress" max="100" value="0" aria-label="Extraction progress"></progress></div>
+      <div class="progress-wrap" id="progress-wrap" hidden><div class="progress-label"><span id="progress-label">Preparing…</span><span class="progress-status"><span id="progress-percent">0%</span><button type="button" class="secondary" id="cancel">Cancel</button></span></div><progress id="progress" max="100" value="0" aria-label="Extraction progress"></progress></div>
       <p class="message" id="message" role="status" aria-live="polite" hidden></p>
+      <details class="quality" id="quality" hidden><summary id="quality-title">Review extraction</summary><p id="quality-summary"></p><ul id="quality-words" hidden></ul><p>OCR confidence is an engine estimate, not an accuracy guarantee. Check names, numbers, tables, and handwriting against the original.</p></details>
     </section>
-    <p class="start-hint" id="start-hint">Choose a file to get started. Your preview and text will appear below.</p>
+    <p class="start-hint" id="start-hint">Choose one or more files to get started. Each file keeps its own pages and results.</p>
+    <section class="batch-panel" id="batch-panel" aria-labelledby="batch-heading" hidden>
+      <div class="batch-header"><div><h2 id="batch-heading">Files & results</h2><p id="batch-summary">Choose a file to view its pages.</p></div><div class="actions"><button type="button" class="secondary" id="copy-all" disabled><svg aria-hidden="true"><use href="#i-copy"/></svg><span id="copy-all-label">Copy all</span></button><button type="button" class="secondary" id="save-all" disabled><svg aria-hidden="true"><use href="#i-download"/></svg>Save all</button></div></div>
+      <div class="document-list" id="document-list" role="group" aria-label="Uploaded files"></div>
+    </section>
+    <div class="viewer-heading" id="viewer-heading" hidden><h2 id="viewer-file"></h2><span id="viewer-page"></span></div>
     <div class="workspace" id="workspace" hidden>
       <section class="card" aria-labelledby="preview-heading">
         <div class="card-header"><h2 id="preview-heading"><svg aria-hidden="true"><use href="#i-file"/></svg>Original file</h2><span class="preview-label" id="file-type">Image preview</span></div>
@@ -134,23 +164,23 @@
           <div class="preview" id="preview" hidden><div id="preview-content"></div></div>
           <div class="empty" id="preview-empty"><div class="empty-icon"><svg aria-hidden="true"><use href="#i-file"/></svg></div><strong id="preview-empty-title">PDF preview</strong><p id="preview-empty-description">Click Extract text to preview your PDF.</p></div>
         </div>
-        <div class="panel-footer"><p class="preview-label" id="preview-label">Original image</p><div class="page-controls" id="page-controls" hidden><button type="button" class="icon-button" id="previous-page" aria-label="Previous PDF page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><span id="page-position" aria-live="polite">1 / 1</span><button type="button" class="icon-button" id="next-page" aria-label="Next PDF page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div></div>
+        <div class="panel-footer"><p class="preview-label" id="preview-label">Original image</p><div class="page-controls" id="page-controls" hidden><button type="button" class="icon-button" id="previous-page" aria-label="Previous PDF page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><select id="page-select" aria-label="Choose PDF page"></select><span id="page-position" aria-live="polite">1 / 1</span><button type="button" class="icon-button" id="next-page" aria-label="Next PDF page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div></div>
       </section>
       <section class="card" aria-labelledby="output-heading">
         <div class="card-header"><h2 id="output-heading"><svg aria-hidden="true"><use href="#i-scan"/></svg>Extracted text</h2><div class="actions"><button type="button" class="secondary" id="copy" disabled><svg aria-hidden="true"><use href="#i-copy"/></svg><span id="copy-label">Copy</span></button><button type="button" class="secondary" id="download" disabled aria-label="Download extracted text"><svg aria-hidden="true"><use href="#i-download"/></svg>Save text</button></div></div>
         <div class="output-body"><textarea id="output" readonly aria-label="Extracted text" spellcheck="false"></textarea><div class="empty" id="empty"><div class="empty-icon"><svg aria-hidden="true"><use href="#i-scan"/></svg></div><strong id="empty-title">Ready when you are</strong><p id="empty-description">Click Extract text to read your file.</p></div></div>
         <div class="panel-footer output-footer"><span id="counts">0 words · 0 characters</span><span class="ready" id="ready"><span class="dot"></span><span id="ready-label">Ready to extract</span></span></div>
+        <div class="review-note" id="review-note" hidden>Text is editable. Compare it with the original and correct any errors before copying or saving.</div>
       </section>
     </div>
     <footer>For best results, use a clear image and select its text language. Internet is needed to load the OCR tools.</footer>
   </main>
+  <script src="extraction-utils.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const PDF_BASE = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/';
     const OCR_BASE = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/';
-    let selectedFile = null;
     let busy = false;
-    let previewURL = null;
     let pdfModulePromise = null;
     let ocrScriptPromise = null;
     let activeWorker = null;
@@ -158,21 +188,210 @@
     let totalPages = 1;
     let pagePreviews = [];
     let previewPage = 0;
+    let pageReports = [];
+    let extractionController = null;
+    let ocrPass = '';
+    let lastProgress = 0;
+    let documents = [];
+    let selectedDocumentId = null;
+    let nextDocumentId = 1;
+    let processingDocument = null;
+    let batchIndex = 0;
+    let batchTotal = 1;
+    let batchCancelled = false;
+    const Utils = ExtractionUtils;
+
+    const currentDocument = () => documents.find(document => document.id === selectedDocumentId);
+    const pendingDocuments = () => documents.filter(document => !['done', 'empty'].includes(document.status));
+
+    function disposeDocument(document) {
+      if (document.imageURL) URL.revokeObjectURL(document.imageURL);
+      for (const url of document.previews) if (url) URL.revokeObjectURL(url);
+    }
+
+    function renderQueue() {
+      const hasFiles = documents.length > 0;
+      $('batch-panel').hidden = !hasFiles;
+      $('file-row').hidden = !hasFiles;
+      $('dropzone').hidden = hasFiles;
+      $('start-hint').hidden = hasFiles;
+      $('workspace').hidden = !hasFiles;
+      $('viewer-heading').hidden = !hasFiles;
+      $('file-name').textContent = documents.length === 1 ? documents[0].file.name : `${documents.length} files selected`;
+      const bytes = documents.reduce((sum, document) => sum + document.file.size, 0);
+      const imageCount = documents.filter(document => !document.isPDF).length;
+      const pdfCount = documents.length - imageCount;
+      $('file-size').textContent = `${imageCount} image${imageCount === 1 ? '' : 's'} · ${pdfCount} PDF${pdfCount === 1 ? '' : 's'} · ${(bytes / 1048576).toFixed(1)} MB`;
+      const readPages = documents.reduce((sum, document) => sum + document.reports.length, 0);
+      const finished = documents.filter(document => ['done', 'empty'].includes(document.status)).length;
+      $('batch-summary').textContent = `${documents.length} file${documents.length === 1 ? '' : 's'} · ${readPages} page${readPages === 1 ? '' : 's'} read · ${finished} complete. Select a file to view its result.`;
+      const count = pendingDocuments().length;
+      $('extract').disabled = busy || !hasFiles;
+      $('extract-label').textContent = busy ? 'Extracting…' : count ? `Extract ${count} file${count > 1 ? 's' : ''}` : 'Re-extract all';
+      const hasText = documents.some(document => document.reports.some(report => report.text.trim()));
+      $('copy-all').disabled = $('save-all').disabled = busy || !hasText;
+      const statuses = { queued: 'Waiting to extract', processing: 'Reading…', done: 'Extracted', empty: 'No text found', partial: 'Partly read — retry available', error: 'Failed — retry available', cancelled: 'Cancelled — retry available' };
+      $('document-list').replaceChildren();
+      documents.forEach((document, index) => {
+        const item = window.document.createElement('div');
+        const needsReview = document.reports.some(report => report.notes?.length || report.uncertain?.length || (report.method !== 'native' && report.confidence < 85));
+        item.className = `document-item ${document.status}${needsReview ? ' review' : ''}${document.id === selectedDocumentId ? ' selected' : ''}`;
+        const select = window.document.createElement('button');
+        select.type = 'button'; select.className = 'document-select'; select.disabled = busy;
+        select.setAttribute('aria-pressed', String(document.id === selectedDocumentId));
+        const name = window.document.createElement('span'); name.className = 'document-title'; name.textContent = `${index + 1}. ${document.file.name}`; name.title = document.file.name;
+        const status = window.document.createElement('span'); status.className = 'document-status';
+        status.textContent = `${statuses[document.status]}${document.pageCount ? ` · ${document.pageCount} page${document.pageCount > 1 ? 's' : ''}` : ''}${needsReview && document.status === 'done' ? ' · Review suggested' : ''}`;
+        select.append(name, status); select.addEventListener('click', () => selectDocument(document.id));
+        const remove = window.document.createElement('button'); remove.type = 'button'; remove.className = 'icon-button'; remove.disabled = busy;
+        remove.textContent = '×'; remove.setAttribute('aria-label', `Remove ${document.file.name}`);
+        remove.addEventListener('click', () => removeDocument(document.id));
+        item.append(select, remove); $('document-list').append(item);
+      });
+    }
+
+    function selectDocument(id) {
+      const document = documents.find(document => document.id === id);
+      if (!document) return;
+      selectedDocumentId = id;
+      pageReports = document.reports;
+      pagePreviews = document.previews;
+      totalPages = document.pageCount || 1;
+      previewPage = document.viewPage;
+      $('file-type').textContent = document.isPDF ? 'PDF document' : 'Image';
+      $('preview-heading').title = document.file.name;
+      $('output-heading').title = document.file.name;
+      renderCurrentPage();
+      renderQuality();
+      renderQueue();
+    }
+
+    function renderCurrentPage() {
+      const document = currentDocument();
+      if (!document) return;
+      const page = document.viewPage + 1;
+      $('viewer-file').textContent = `${documents.indexOf(document) + 1}. ${document.file.name}`;
+      $('viewer-page').textContent = `Page ${page} of ${totalPages}`;
+      const report = document.reports.find(report => report.page === page);
+      const url = document.isPDF ? document.previews[document.viewPage] : document.imageURL;
+      $('preview-content').replaceChildren();
+      $('preview').hidden = !url;
+      $('preview-empty').hidden = Boolean(url);
+      if (url) {
+        const image = new Image(); image.src = url;
+        image.alt = document.isPDF ? `${document.file.name}, page ${page} of ${totalPages}` : document.file.name;
+        image.onerror = () => { if (!image.parentNode) return; $('preview').hidden = true; $('preview-empty').hidden = false; $('preview-empty-title').textContent = 'Preview unavailable'; $('preview-empty-description').textContent = 'This image format could not be displayed. Try PNG or JPG.'; };
+        $('preview-content').append(image);
+      } else {
+        $('preview-empty-title').textContent = document.error ? 'Preview unavailable' : 'PDF preview';
+        $('preview-empty-description').textContent = document.error || (document.status === 'processing' ? 'Preparing this page…' : 'Extract the file to see its pages.');
+      }
+      $('preview-label').textContent = document.isPDF ? `PDF page ${page} of ${totalPages}` : 'Original image';
+      $('page-position').textContent = `${page} / ${totalPages}`;
+      $('page-controls').hidden = !document.isPDF || totalPages <= 1;
+      if ($('page-select').options.length !== totalPages) {
+        $('page-select').replaceChildren();
+        for (let index = 0; index < totalPages; index++) $('page-select').add(new Option(`Page ${index + 1}`, String(index)));
+      }
+      $('page-select').value = String(document.viewPage);
+      $('page-select').disabled = busy;
+      $('previous-page').disabled = busy || document.viewPage === 0;
+      $('next-page').disabled = busy || document.viewPage >= totalPages - 1;
+      setOutput(report?.text || '');
+      $('output').readOnly = busy || !report;
+      $('output').scrollTop = 0;
+      $('empty-title').textContent = document.error && !report ? 'This page was not extracted' : report ? 'No text found on this page' : document.status === 'processing' ? 'Reading this file…' : 'Ready when you are';
+      $('empty-description').textContent = document.error || (report ? 'Check the image quality and text language, then try again.' : 'Click Extract to read the selected files.');
+      $('ready-label').textContent = report?.edited ? 'Edited — review changes' : report?.text ? 'Extraction complete' : document.status === 'processing' ? 'Processing' : document.error ? 'Not fully extracted' : report ? 'No text found' : 'Waiting to extract';
+      $('ready').classList.toggle('done', Boolean(report?.text));
+    }
+
+    function addFiles(files) {
+      if (busy) return;
+      const skipped = [];
+      let lastAdded = null;
+      let firstAdded = null;
+      for (const file of Array.from(files)) {
+        const isPDF = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+        const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif|tiff?|avif|svg)$/i.test(file.name);
+        if (!file.size || (!isPDF && !isImage)) { skipped.push(file.name); continue; }
+        lastAdded = { id: nextDocumentId++, file, isPDF, imageURL: isPDF ? null : URL.createObjectURL(file), previews: [], reports: [], pageCount: isPDF ? null : 1, viewPage: 0, status: 'queued', error: '' };
+        documents.push(lastAdded);
+        firstAdded ||= lastAdded;
+      }
+      if (firstAdded) { selectDocument(firstAdded.id); $('progress-wrap').hidden = true; }
+      message(skipped.length ? `Skipped ${skipped.length} empty or unsupported file(s): ${skipped.join(', ')}. Please choose images or PDFs.` : '', Boolean(skipped.length));
+      renderQueue();
+    }
+
+    function removeDocument(id) {
+      if (busy) return;
+      const document = documents.find(document => document.id === id);
+      if (!document) return;
+      const index = documents.indexOf(document);
+      disposeDocument(document);
+      documents.splice(index, 1);
+      if (selectedDocumentId === id) {
+        selectedDocumentId = null;
+        if (documents.length) selectDocument(documents[Math.min(index, documents.length - 1)].id);
+        else { pageReports = []; pagePreviews = []; setOutput(''); $('quality').hidden = true; }
+      }
+      renderQueue();
+    }
+
+    function guarded(promise, label, milliseconds = 120000) {
+      const signal = extractionController?.signal;
+      return new Promise((resolve, reject) => {
+        const abort = () => finish(reject, signal.reason || new DOMException('Extraction cancelled.', 'AbortError'));
+        const timer = setTimeout(() => finish(reject, new Error(`${label} timed out. Try again or use a smaller file.`)), milliseconds);
+        function finish(callback, value) {
+          clearTimeout(timer);
+          signal?.removeEventListener('abort', abort);
+          callback(value);
+        }
+        Promise.resolve(promise).then(value => finish(resolve, value), error => finish(reject, error instanceof Error ? error : new Error(String(error))));
+        if (signal?.aborted) { abort(); return; }
+        signal?.addEventListener('abort', abort, { once: true });
+      });
+    }
+
+    function renderQuality() {
+      $('quality').hidden = !pageReports.length;
+      const ocr = pageReports.filter(report => report.method !== 'native' && report.text);
+      const native = pageReports.filter(report => report.method === 'native' && report.text).length;
+      const issues = pageReports.flatMap(report => (report.notes || []).map(note => `Page ${report.page}: ${note}`));
+      const uncertain = ocr.flatMap(report => report.uncertain.map(word => ({ ...word, page: report.page })));
+      const needsReview = issues.length || uncertain.length || ocr.some(report => report.confidence < 85);
+      $('quality').classList.toggle('needs-review', Boolean(needsReview));
+      $('quality-title').textContent = needsReview ? 'Some text needs review — see details' : 'Extraction details — review against the original';
+      const summary = [];
+      if (native) summary.push(`${native} page(s) read from selectable PDF text.`);
+      if (ocr.length) {
+        const weight = ocr.reduce((sum, report) => sum + report.text.length, 0);
+        const confidence = ocr.reduce((sum, report) => sum + report.confidence * report.text.length, 0) / weight;
+        summary.push(`${ocr.length} page(s) used OCR. Engine confidence: ${Math.round(confidence)}/100. ${uncertain.length} word(s) flagged for review.`);
+      }
+      summary.push(...issues);
+      $('quality-summary').textContent = summary.join(' ');
+      $('quality-words').replaceChildren();
+      const seen = new Set();
+      for (const word of uncertain) {
+        const key = `${word.page}:${word.text}`;
+        if (seen.has(key) || seen.size >= 30) continue;
+        seen.add(key);
+        const li = document.createElement('li');
+        li.textContent = `Page ${word.page}: “${word.text}” (${Math.round(word.confidence)}/100 confidence)`;
+        $('quality-words').append(li);
+      }
+      $('quality-words').hidden = !seen.size;
+      $('quality').open = Boolean(needsReview);
+    }
 
     function showPDFPage(index) {
-      if (!pagePreviews[index]) return;
-      previewPage = index;
-      const image = new Image();
-      image.src = pagePreviews[index];
-      image.alt = `PDF page ${index + 1} of ${totalPages}`;
-      $('preview-content').replaceChildren(image);
-      $('preview').hidden = false;
-      $('preview-empty').hidden = true;
-      $('preview-label').textContent = `PDF page ${index + 1}`;
-      $('page-position').textContent = `${index + 1} / ${totalPages}`;
-      $('page-controls').hidden = totalPages <= 1;
-      $('previous-page').disabled = busy || index === 0;
-      $('next-page').disabled = busy || index >= pagePreviews.length - 1;
+      const document = currentDocument();
+      if (!document || index < 0 || index >= totalPages) return;
+      document.viewPage = previewPage = index;
+      renderCurrentPage();
     }
 
     function message(text, error = false) {
@@ -182,90 +401,36 @@
     }
 
     function progress(value, label) {
-      const percent = Math.max(0, Math.min(100, Math.round(value)));
+      const combined = busy ? (batchIndex + value / 100) / batchTotal * 100 : value;
+      const percent = Math.max(lastProgress, Math.min(100, Math.round(combined)));
+      lastProgress = percent;
       $('progress').value = percent;
       $('progress-percent').textContent = `${percent}%`;
-      $('progress-label').textContent = label;
+      $('progress-label').textContent = busy && batchTotal > 1 ? `File ${batchIndex + 1} of ${batchTotal}: ${label}` : label;
     }
 
     function setOutput(text) {
-      $('output').value = text;
+      if ($('output').value !== text) $('output').value = text;
       $('empty').hidden = Boolean(text.trim());
       $('copy').disabled = !text.trim() || busy;
       $('download').disabled = !text.trim() || busy;
       const words = text.trim() ? text.trim().split(/\s+/u).length : 0;
       $('counts').textContent = `${words.toLocaleString()} words · ${text.length.toLocaleString()} characters`;
+      $('review-note').hidden = !text.trim();
+      $('output').readOnly = busy || !text.trim();
     }
 
     function setBusy(value) {
       busy = value;
       for (const id of ['dropzone', 'file-input', 'change-file', 'remove', 'language']) $(id).disabled = value;
-      $('extract').disabled = value || !selectedFile;
-      $('extract-label').textContent = value ? 'Extracting…' : 'Extract text';
       $('output').setAttribute('aria-busy', String(value));
+      $('output').readOnly = value || !$('output').value.trim();
       $('copy').disabled = value || !$('output').value.trim();
       $('download').disabled = value || !$('output').value.trim();
       $('previous-page').disabled = value || previewPage === 0;
-      $('next-page').disabled = value || previewPage >= pagePreviews.length - 1;
-    }
-
-    function clearPreview() {
-      if (previewURL) URL.revokeObjectURL(previewURL);
-      previewURL = null;
-      for (const url of pagePreviews) URL.revokeObjectURL(url);
-      pagePreviews = [];
-      previewPage = 0;
-      $('preview-content').replaceChildren();
-      $('preview').hidden = true;
-      $('preview-empty').hidden = false;
-      $('page-controls').hidden = true;
-    }
-
-    function selectFile(file) {
-      if (busy) return;
-      if (!file) return;
-      const isPDF = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-      const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|bmp|gif|tiff?|avif|svg)$/i.test(file.name);
-      if (!isPDF && !isImage) { message('Please choose an image or a PDF file.', true); return; }
-      if (!file.size) { message('This file is empty. Please choose another file.', true); return; }
-      selectedFile = file;
-      clearPreview();
-      $('workspace').hidden = false;
-      $('start-hint').hidden = true;
-      $('dropzone').hidden = true;
-      $('file-type').textContent = isPDF ? 'PDF document' : 'Image';
-      $('preview-label').textContent = isPDF ? 'PDF preview' : 'Original image';
-      $('preview-empty-title').textContent = isPDF ? 'PDF preview' : 'Image preview';
-      $('preview-empty-description').textContent = isPDF ? 'Click Extract text to preview your PDF.' : 'Loading your image…';
-      setOutput('');
-      message('');
-      $('progress-wrap').hidden = true;
-      $('empty-title').textContent = 'Your text will appear here';
-      $('empty-description').textContent = 'Your file is ready. Click Extract text to get started.';
-      $('file-row').hidden = false;
-      $('file-name').textContent = file.name;
-      $('file-name').title = file.name;
-      $('file-size').textContent = `${isPDF ? 'PDF document' : 'Image'} · ${file.size < 1048576 ? `${(file.size / 1024).toFixed(1)} KB` : `${(file.size / 1048576).toFixed(1)} MB`}`;
-      $('extract').disabled = false;
-      $('ready').classList.remove('done');
-      $('ready-label').textContent = 'Ready to extract';
-      if (isImage) {
-        const image = new Image();
-        image.alt = 'Selected image preview';
-        previewURL = URL.createObjectURL(file);
-        image.src = previewURL;
-        image.onerror = () => {
-          if (!image.parentNode) return;
-          $('preview').hidden = true;
-          $('preview-empty').hidden = false;
-          $('preview-empty-title').textContent = 'Preview unavailable';
-          $('preview-empty-description').textContent = 'Try a browser-supported image such as PNG or JPG.';
-        };
-        $('preview-content').append(image);
-        $('preview-label').textContent = 'Image preview';
-        $('preview').hidden = false;
-        $('preview-empty').hidden = true;
-      }
+      $('next-page').disabled = value || previewPage >= totalPages - 1;
+      $('page-select').disabled = value;
+      renderQueue();
     }
 
     function loadPDF() {
@@ -283,9 +448,10 @@
       if (!ocrScriptPromise) {
         ocrScriptPromise = new Promise((resolve, reject) => {
           const script = document.createElement('script');
+          const timer = setTimeout(() => { script.remove(); ocrScriptPromise = null; reject(new Error('Loading OCR tools timed out. Check your connection and try again.')); }, 45000);
           script.src = `${OCR_BASE}tesseract.min.js`;
-          script.onload = () => resolve(window.Tesseract);
-          script.onerror = () => { script.remove(); ocrScriptPromise = null; reject(new Error('Could not load the OCR tools. Check your internet connection and try again.')); };
+          script.onload = () => { clearTimeout(timer); resolve(window.Tesseract); };
+          script.onerror = () => { clearTimeout(timer); script.remove(); ocrScriptPromise = null; reject(new Error('Could not load the OCR tools. Check your internet connection and try again.')); };
           document.head.append(script);
         });
       }
@@ -295,85 +461,227 @@
     async function getWorker() {
       if (!activeWorker) {
         progress(((ocrPage - 1) / totalPages) * 100, 'Loading text recognition tools…');
-        const Tesseract = await loadOCR();
-        activeWorker = await Tesseract.createWorker($('language').value, 1, {
+        const Tesseract = await guarded(loadOCR(), 'Loading OCR tools', 60000);
+        const controller = extractionController;
+        const initializing = Tesseract.createWorker($('language').value, 1, {
           workerPath: `${OCR_BASE}worker.min.js`,
+          errorHandler: error => controller.abort(new Error(`Text recognition failed: ${String(error)}`)),
           logger: ({ status, progress: fraction }) => {
+            if (controller.signal.aborted || !busy) return;
             if (status === 'recognizing text') {
-              progress(((ocrPage - 1 + (fraction || 0)) / totalPages) * 100,
-                totalPages > 1 ? `Recognizing page ${ocrPage} of ${totalPages}…` : 'Recognizing text…');
-            }
+              // Multiple passes run sequentially; the page only completes after all passes.
+              progress(((ocrPage - 1 + (fraction || 0) * 0.8) / totalPages) * 100,
+                `Page ${ocrPage} of ${totalPages}: ${ocrPass}…`);
+            } else progress(((ocrPage - 1) / totalPages) * 100, `Preparing OCR: ${status}…`);
           }
         });
-        await activeWorker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.AUTO });
+        let accepted = false;
+        initializing.then(worker => { if (controller.signal.aborted || !accepted) setTimeout(() => { if (!accepted) worker.terminate().catch(() => {}); }, 0); }).catch(() => {});
+        try { activeWorker = await guarded(initializing, 'Starting text recognition'); accepted = true; }
+        catch (error) { controller.abort(error); throw error; }
+        await guarded(activeWorker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.AUTO, preserve_interword_spaces: '1', user_defined_dpi: '300' }), 'Configuring OCR');
       }
       return activeWorker;
     }
 
-    function textFromPage(items) {
-      let result = '';
-      let previousY = null;
-      for (const item of items) {
-        if (typeof item.str !== 'string') continue;
-        const y = item.transform?.[5];
-        if (previousY !== null && y !== undefined && Math.abs(y - previousY) > Math.max(2, (item.height || 0) * 0.5) && !result.endsWith('\n')) result += '\n';
-        if (result && !/\s$/.test(result) && item.str && !/^\s/.test(item.str)) result += ' ';
-        result += item.str;
-        if (item.hasEOL) result += '\n';
-        if (y !== undefined) previousY = y;
+    function prepareImage(source, enhance = false) {
+      const width = source.naturalWidth || source.width, height = source.naturalHeight || source.height;
+      if (!width || !height) throw new Error('This image has no readable dimensions.');
+      const scale = Math.min(2, Math.max(1, 2000 / Math.max(width, height)), 4096 / Math.max(width, height), Math.sqrt(10000000 / (width * height)));
+      const border = 16;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(width * scale) + border * 2;
+      canvas.height = Math.ceil(height * scale) + border * 2;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
+      context.imageSmoothingEnabled = true; context.imageSmoothingQuality = 'high';
+      context.drawImage(source, border, border, canvas.width - border * 2, canvas.height - border * 2);
+      const pixels = context.getImageData(border, border, canvas.width - border * 2, canvas.height - border * 2);
+      const histogram = new Uint32Array(256);
+      let min = 255, max = 0, total = 0;
+      for (let i = 0; i < pixels.data.length; i += 4) {
+        const gray = Math.round(pixels.data[i] * .299 + pixels.data[i + 1] * .587 + pixels.data[i + 2] * .114);
+        histogram[gray]++; total += gray; min = Math.min(min, gray); max = Math.max(max, gray);
       }
-      return result.trim();
+      const count = pixels.data.length / 4;
+      if (enhance && max - min >= 2) {
+        let low = 0, high = 255, sum = 0;
+        for (let i = 0; i < 256; i++) { sum += histogram[i]; if (sum >= count * .01) { low = i; break; } }
+        sum = 0;
+        for (let i = 255; i >= 0; i--) { sum += histogram[i]; if (sum >= count * .01) { high = i; break; } }
+        if (high - low < 20) { low = min; high = max; }
+        const invert = total / count < 115;
+        for (let i = 0; i < pixels.data.length; i += 4) {
+          const gray = pixels.data[i] * .299 + pixels.data[i + 1] * .587 + pixels.data[i + 2] * .114;
+          const value = Math.max(0, Math.min(255, (gray - low) * 255 / Math.max(1, high - low)));
+          pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = invert ? 255 - value : value;
+        }
+        context.putImageData(pixels, border, border);
+      }
+      return { canvas, blank: max - min < 2, downscaled: scale < 1 };
+    }
+
+    function rotateImage(source, degrees) {
+      const canvas = document.createElement('canvas');
+      const quarter = degrees % 180 !== 0;
+      canvas.width = quarter ? source.height : source.width;
+      canvas.height = quarter ? source.width : source.height;
+      const context = canvas.getContext('2d');
+      context.translate(canvas.width / 2, canvas.height / 2); context.rotate(degrees * Math.PI / 180);
+      context.drawImage(source, -source.width / 2, -source.height / 2);
+      return canvas;
+    }
+
+    async function recognizeImage(source) {
+      const prepared = prepareImage(source);
+      const canvases = [prepared.canvas];
+      const notes = prepared.downscaled ? ['A large image was resized to fit browser memory limits; check small text.'] : [];
+      try {
+        if (prepared.blank) return { ...Utils.analyzeOCR({}), notes: ['No visible text was found.'] };
+        const worker = await getWorker();
+        const candidates = [];
+        const run = async (canvas, label, psm = '3', threshold = '0') => {
+          ocrPass = label;
+          const { data } = await guarded(worker.recognize(canvas, { rotateAuto: true, tessedit_pageseg_mode: psm, thresholding_method: threshold }, { text: true, blocks: true }), 'Recognizing this page');
+          const candidate = Utils.analyzeOCR(data);
+          candidates.push(candidate);
+          return candidate;
+        };
+        await run(prepared.canvas, 'reading original image');
+        const enhanced = prepareImage(source, true); canvases.push(enhanced.canvas);
+        await run(enhanced.canvas, 'checking enhanced image', '3', '2');
+        let best = Utils.chooseCandidate(candidates);
+        if (!Utils.readableText(best.text) || best.confidence < 90 || best.uncertain.length / Math.max(1, best.words.length) > .15) {
+          await run(enhanced.canvas, 'checking scattered text', '11', '2');
+          best = Utils.chooseCandidate(candidates);
+        }
+        if (!Utils.readableText(best.text) || best.confidence < 85) {
+          for (const degrees of [90, 180, 270]) {
+            const rotated = rotateImage(enhanced.canvas, degrees);
+            try { await run(rotated, `checking ${degrees}° rotation`); }
+            finally { rotated.width = 0; rotated.height = 0; }
+            best = Utils.chooseCandidate(candidates);
+            if (Utils.readableText(best.text) && best.confidence >= 90) break;
+          }
+        }
+        const disagreement = candidates.some(candidate => candidate !== best && candidate.confidence >= 70 && candidate.text && Utils.similarity(candidate.text, best.text) < .85);
+        if (disagreement) notes.push('OCR passes disagreed; compare the extracted text with the original.');
+        if (best.confidence < 85 && best.text) notes.push('Low-confidence text was kept rather than silently removed.');
+        if (!Utils.readableText(best.text)) notes.push('OCR could not find readable text. Check the image quality and selected language.');
+        return { ...best, text: Utils.readableText(best.text) ? best.text : '', notes };
+      } finally { for (const canvas of canvases) { canvas.width = 0; canvas.height = 0; } }
+    }
+
+    async function hasRasterImages(page, pdfjs, viewport) {
+      const operators = await guarded(page.getOperatorList(), 'Reading PDF images');
+      const ops = pdfjs.OPS;
+      const imageOps = new Set([ops.paintImageXObject, ops.paintInlineImageXObject, ops.paintImageMaskXObject]);
+      const repeatedOps = new Set([ops.paintImageXObjectRepeat, ops.paintInlineImageXObjectGroup, ops.paintImageMaskXObjectGroup, ops.paintImageMaskXObjectRepeat]);
+      let matrix = [1, 0, 0, 1, 0, 0];
+      const stack = [];
+      for (let i = 0; i < operators.fnArray.length; i++) {
+        const op = operators.fnArray[i], args = operators.argsArray[i];
+        if (op === ops.save || op === ops.paintFormXObjectBegin) {
+          stack.push(matrix.slice());
+          if (op === ops.paintFormXObjectBegin && args[0]) matrix = pdfjs.Util.transform(matrix, args[0]);
+        } else if (op === ops.restore || op === ops.paintFormXObjectEnd) matrix = stack.pop() || [1, 0, 0, 1, 0, 0];
+        else if (op === ops.transform) matrix = pdfjs.Util.transform(matrix, args);
+        else if (repeatedOps.has(op)) return true;
+        else if (imageOps.has(op)) {
+          const displayed = pdfjs.Util.transform(viewport.transform, matrix);
+          if (Math.abs(displayed[0] * displayed[3] - displayed[1] * displayed[2]) > 0) return true;
+        }
+      }
+      return false;
     }
 
     async function extractPDF(file) {
-      const pdfjs = await loadPDF();
+      const pdfjs = await guarded(loadPDF(), 'Loading PDF tools', 60000);
       const loadingTask = pdfjs.getDocument({
-        data: new Uint8Array(await file.arrayBuffer()),
+        data: new Uint8Array(await guarded(file.arrayBuffer(), 'Reading the file')),
         cMapUrl: `${PDF_BASE}cmaps/`, cMapPacked: true,
         standardFontDataUrl: `${PDF_BASE}standard_fonts/`, wasmUrl: `${PDF_BASE}wasm/`
       });
       let pdf;
       try {
-        pdf = await loadingTask.promise;
+        pdf = await guarded(loadingTask.promise, 'Opening the PDF');
         totalPages = pdf.numPages;
-        const pages = [];
+        processingDocument.pageCount = totalPages;
+        renderCurrentPage();
         for (let number = 1; number <= totalPages; number++) {
           ocrPage = number;
           progress(((number - 1) / totalPages) * 100, `Reading page ${number} of ${totalPages}…`);
-          const page = await pdf.getPage(number);
-          let text = textFromPage((await page.getTextContent()).items);
-          {
+          let page, canvas, report = { page: number, text: '', method: 'native', notes: [], uncertain: [] };
+          try {
+            page = await guarded(pdf.getPage(number), `Opening page ${number}`);
             const base = page.getViewport({ scale: 1 });
-            const scale = Math.min(text ? 1.25 : 2.5, 4096 / Math.max(base.width, base.height), Math.sqrt(16000000 / (base.width * base.height)));
+            const content = await guarded(page.getTextContent(), `Reading page ${number}`);
+            const nativeText = Utils.textFromPage(content.items, base.transform);
+            const usableNative = Utils.readableText(nativeText);
+            let useOCR = !usableNative;
+            try { if (usableNative) useOCR = await hasRasterImages(page, pdfjs, base); }
+            catch (error) {
+              if (extractionController.signal.aborted) throw error;
+              useOCR = true; report.notes.push('Image detection failed; the full page was checked with OCR.');
+            }
+            report.text = usableNative ? nativeText : '';
+            const desiredScale = useOCR ? 300 / 72 : 1.5;
+            const scale = Math.min(desiredScale, 4096 / Math.max(base.width, base.height), Math.sqrt(10000000 / (base.width * base.height)));
             const viewport = page.getViewport({ scale });
-            const canvas = document.createElement('canvas');
+            canvas = document.createElement('canvas');
             canvas.width = Math.ceil(viewport.width);
             canvas.height = Math.ceil(viewport.height);
-            await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: '#ffffff' }).promise;
-            const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+            const renderTask = page.render({ canvasContext: canvas.getContext('2d'), viewport, background: '#ffffff' });
+            try { await guarded(renderTask.promise, `Rendering page ${number}`); }
+            catch (error) { renderTask.cancel(); throw error; }
+            const blob = await guarded(new Promise((resolve) => canvas.toBlob(resolve, 'image/png')), 'Creating the preview');
             if (!blob) throw new Error('Could not create a preview for this PDF page.');
-            pagePreviews.push(URL.createObjectURL(blob));
+            pagePreviews[number - 1] = URL.createObjectURL(blob);
             if (number === 1) showPDFPage(0);
-            if (!text) {
-              const worker = await getWorker();
-              text = (await worker.recognize(canvas)).data.text.trim();
+            if (useOCR) {
+              const recognized = await recognizeImage(canvas);
+              report = { ...report, ...recognized, method: usableNative ? 'hybrid' : 'ocr', notes: [...report.notes, ...recognized.notes] };
+              if (scale < desiredScale) report.notes.push('This large page was rendered below 300 DPI; inspect small text.');
+              if (nativeText && !usableNative) report.notes.push('The PDF text layer was unreadable; OCR was used instead.');
+              if (usableNative) {
+                const merged = Utils.mergeHybrid(nativeText, recognized.text);
+                report.text = merged.text;
+                if (merged.missing) report.notes.push('Some selectable text was kept in a separate section because it could not be matched to the scan.');
+              }
             }
-            canvas.width = 0; canvas.height = 0;
+          } catch (error) {
+            if (extractionController.signal.aborted || /timed out/i.test(error.message)) throw error;
+            report.notes.push(`This page was only partially read: ${error.message || String(error)}.`);
+            if (!report.text) report.failed = true;
+          } finally {
+            if (canvas) { canvas.width = 0; canvas.height = 0; }
+            page?.cleanup();
           }
-          pages.push(totalPages > 1 ? `— Page ${number} —\n${text || '[No text found on this page]'}` : text);
-          setOutput(pages.join('\n\n'));
-          page.cleanup();
+          if (pagePreviews.length < number) pagePreviews[number - 1] = null;
+          if (number === 1 && !pagePreviews[0]) showPDFPage(0);
+          pageReports.push(report);
+          renderCurrentPage();
+          renderQueue();
+          progress(number / totalPages * 100, `Read ${number} of ${totalPages} pages`);
         }
-        return { text: pages.join('\n\n'), hasText: pages.some((page) => page.replace(/^— Page \d+ —\n/u, '').replace('[No text found on this page]', '').trim()) };
+        return { hasText: pageReports.some(report => Utils.readableText(report.text)) };
       } finally {
         await loadingTask.destroy();
       }
     }
 
-    async function extract() {
-      if (!selectedFile || busy) return;
-      setBusy(true);
-      if (selectedFile.type === 'application/pdf' || /\.pdf$/i.test(selectedFile.name)) clearPreview();
+    async function extractDocument(document) {
+      processingDocument = document;
+      for (const url of document.previews) if (url) URL.revokeObjectURL(url);
+      document.previews = [];
+      document.reports = [];
+      document.viewPage = 0;
+      document.pageCount = document.isPDF ? null : 1;
+      document.status = 'processing';
+      document.error = '';
+      selectDocument(document.id);
+      extractionController = new AbortController();
+      $('quality').hidden = true;
       setOutput('');
       message('');
       $('progress-wrap').hidden = false;
@@ -386,53 +694,91 @@
       ocrPage = 1;
       try {
         let result;
-        if (selectedFile.type === 'application/pdf' || /\.pdf$/i.test(selectedFile.name)) {
-          result = await extractPDF(selectedFile);
+        if (document.isPDF) {
+          result = await extractPDF(document.file);
         } else {
           // Decode first so unsupported or damaged images get a useful error.
           const image = new Image();
-          const url = URL.createObjectURL(selectedFile);
+          const url = URL.createObjectURL(document.file);
           try {
             image.src = url;
-            await image.decode();
-            const worker = await getWorker();
-            const text = (await worker.recognize(image)).data.text.trim();
-            result = { text, hasText: Boolean(text) };
+            await guarded(image.decode(), 'Opening the image', 45000);
+            const recognized = await recognizeImage(image);
+            pageReports.push({ ...recognized, page: 1, method: 'ocr' });
+            result = { text: recognized.text, hasText: Boolean(recognized.text) };
           } catch (error) {
             if (error.name === 'EncodingError') throw new Error('This image format cannot be read by your browser. Try converting it to PNG or JPG.');
             throw error;
           } finally { URL.revokeObjectURL(url); }
         }
-        setOutput(result.hasText ? result.text : '');
+        const partial = pageReports.some(report => report.failed || report.notes.some(note => /partially read/.test(note)));
+        document.status = partial ? 'partial' : result.hasText ? 'done' : 'empty';
+        if (partial) document.error = 'Some pages could not be fully read. Retry this file to try again.';
+        renderCurrentPage();
+        renderQuality();
         progress(100, 'Complete');
-        $('progress-wrap').hidden = true;
         $('ready-label').textContent = result.hasText ? 'Extraction complete' : 'No text found';
         $('ready').classList.toggle('done', result.hasText);
         if (result.hasText) {
-          message(`Text extracted${totalPages > 1 ? ` from ${totalPages} pages` : ''}. You can copy or save it now.`);
+          message(partial ? 'Some pages could not be fully read. Completed text is shown; check the review details.' : `Text extracted${totalPages > 1 ? ` from ${totalPages} pages` : ''}. Review it against the original before use.`);
         } else {
           $('empty-title').textContent = 'No text found';
           $('empty-description').textContent = 'Try a clearer image and check that the selected language matches the text.';
           message('No readable text was found in this file.');
         }
       } catch (error) {
-        console.error(error);
+        if (error.name !== 'AbortError') console.error(error);
+        renderQuality();
         let details = error.message || 'Please try another file.';
         if (error.name === 'PasswordException') details = 'This PDF is password-protected. Upload an unlocked copy.';
         else if (error.name === 'InvalidPDFException') details = 'This PDF is damaged or invalid. Please try another PDF.';
         else if (/fetch|network|import|load module/i.test(details)) details = 'Could not load the extraction tools. Check your internet connection and try again.';
-        message(`Extraction failed. ${details}${$('output').value ? ' Text from completed pages is still shown.' : ''}`, true);
-        $('progress-wrap').hidden = true;
-        $('empty-title').textContent = 'Could not read this file';
+        const cancelled = error.name === 'AbortError';
+        document.status = pageReports.some(report => report.text) ? 'partial' : cancelled ? 'cancelled' : 'error';
+        document.error = cancelled ? 'Extraction cancelled. Retry to read the remaining pages.' : details;
+        renderCurrentPage();
+        message(`${cancelled ? 'Extraction cancelled.' : `Extraction failed. ${details}`}${$('output').value ? ' Text from completed pages is still shown.' : ''}`, !cancelled);
+        $('empty-title').textContent = cancelled ? 'Extraction cancelled' : 'Could not read this file';
         $('empty-description').textContent = 'Check the message above, then try again.';
-        $('ready-label').textContent = 'Extraction failed';
+        $('ready-label').textContent = cancelled ? 'Cancelled' : 'Extraction failed';
         if ($('preview').hidden) {
           $('preview-empty-title').textContent = 'Preview unavailable';
           $('preview-empty-description').textContent = 'Check the message above and try another file.';
         }
       } finally {
         if (activeWorker) { try { await activeWorker.terminate(); } catch (error) { console.warn(error); } activeWorker = null; }
+        document.message = $('message').textContent;
+        extractionController = null;
+        renderQueue();
+      }
+    }
+
+    async function extract() {
+      if (busy || !documents.length) return;
+      const queue = pendingDocuments().length ? pendingDocuments() : documents.slice();
+      const requestedId = selectedDocumentId;
+      batchTotal = queue.length;
+      batchIndex = 0;
+      lastProgress = 0;
+      batchCancelled = false;
+      setBusy(true);
+      try {
+        for (batchIndex = 0; batchIndex < queue.length; batchIndex++) {
+          if (batchCancelled) break;
+          await extractDocument(queue[batchIndex]);
+        }
+      } finally {
+        processingDocument = null;
         setBusy(false);
+        if (documents.some(document => document.id === requestedId)) selectDocument(requestedId);
+        $('progress-wrap').hidden = true;
+        if (documents.length === 1) message(documents[0].message || '', documents[0].status === 'error');
+        else if (batchCancelled) message('Batch cancelled. Completed results are kept. Click Extract to retry the unfinished files.');
+        else {
+          const failed = documents.filter(document => ['partial', 'error', 'cancelled'].includes(document.status)).length;
+          const pages = documents.reduce((sum, document) => sum + document.reports.length, 0);
+          message(`Batch complete: ${pages} page${pages === 1 ? '' : 's'} read across ${documents.length} files.${failed ? ` ${failed} file${failed === 1 ? ' needs' : 's need'} retry; select ${failed === 1 ? 'it' : 'them'} to see the details.` : ' Select a file and page to review its text.'}`, Boolean(failed));
+        }
       }
     }
 
@@ -440,7 +786,8 @@
     $('change-file').addEventListener('click', () => $('file-input').click());
     $('previous-page').addEventListener('click', () => showPDFPage(previewPage - 1));
     $('next-page').addEventListener('click', () => showPDFPage(previewPage + 1));
-    $('file-input').addEventListener('change', (event) => { selectFile(event.target.files[0]); event.target.value = ''; });
+    $('page-select').addEventListener('change', (event) => showPDFPage(Number(event.target.value)));
+    $('file-input').addEventListener('change', (event) => { addFiles(event.target.files); event.target.value = ''; });
     let dragDepth = 0;
     $('upload-card').addEventListener('dragenter', (event) => { event.preventDefault(); if (!busy) { dragDepth++; $('dropzone').classList.add('dragging'); } });
     $('upload-card').addEventListener('dragover', (event) => event.preventDefault());
@@ -448,21 +795,35 @@
     $('upload-card').addEventListener('drop', (event) => {
       event.preventDefault(); dragDepth = 0; $('dropzone').classList.remove('dragging');
       if (busy) return;
-      if (event.dataTransfer.files.length > 1) { message('Please upload one file at a time.', true); return; }
-      selectFile(event.dataTransfer.files[0]);
+      addFiles(event.dataTransfer.files);
     });
     // Prevent dropping a file elsewhere from navigating away from the app.
     window.addEventListener('dragover', (event) => event.preventDefault());
     window.addEventListener('drop', (event) => event.preventDefault());
     $('extract').addEventListener('click', extract);
+    $('cancel').addEventListener('click', () => { batchCancelled = true; extractionController?.abort(new DOMException('Extraction cancelled.', 'AbortError')); });
+    $('output').addEventListener('input', () => {
+      const document = currentDocument();
+      const report = document?.reports.find(report => report.page === document.viewPage + 1);
+      if (report) { report.text = $('output').value; report.edited = true; }
+      setOutput($('output').value);
+      // An empty edited field must stay editable so the user can type a correction.
+      $('output').readOnly = false;
+      $('ready-label').textContent = 'Edited — review changes';
+      renderQueue();
+    });
     $('remove').addEventListener('click', () => {
       if (busy) return;
-      selectedFile = null; clearPreview(); setOutput(''); message('');
+      for (const document of documents) disposeDocument(document);
+      documents = []; selectedDocumentId = null; pagePreviews = [];
+      setOutput(''); message('');
+      pageReports = []; $('quality').hidden = true;
       $('workspace').hidden = true; $('start-hint').hidden = false; $('dropzone').hidden = false;
       $('file-input').value = ''; $('file-row').hidden = true; $('progress-wrap').hidden = true; $('extract').disabled = true;
       $('empty-title').textContent = 'Your text will appear here';
       $('empty-description').textContent = 'Choose an image or PDF above, then click Extract text.';
       $('ready-label').textContent = 'Waiting for a file'; $('ready').classList.remove('done');
+      renderQueue();
     });
     $('copy').addEventListener('click', async () => {
       try {
@@ -474,12 +835,24 @@
         message('Text selected. Press Ctrl+C (or Command+C) to copy.');
       }
     });
-    $('download').addEventListener('click', () => {
-      const url = URL.createObjectURL(new Blob([$('output').value], { type: 'text/plain;charset=utf-8' }));
+    function saveText(text, filename) {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
       const anchor = document.createElement('a');
-      anchor.href = url; anchor.download = `${selectedFile.name.replace(/\.[^.]+$/, '')}-text.txt`;
+      anchor.href = url; anchor.download = filename;
       document.body.append(anchor); anchor.click(); anchor.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    $('download').addEventListener('click', () => {
+      const document = currentDocument();
+      saveText($('output').value, `${document.file.name.replace(/\.[^.]+$/, '')}${document.isPDF ? `-page-${document.viewPage + 1}` : ''}-text.txt`);
+    });
+    $('save-all').addEventListener('click', () => saveText(Utils.formatBatch(documents), 'textlens-all-results.txt'));
+    $('copy-all').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(Utils.formatBatch(documents));
+        $('copy-all-label').textContent = 'Copied!';
+        setTimeout(() => { $('copy-all-label').textContent = 'Copy all'; }, 1800);
+      } catch { message('Could not copy the full batch. Use Save all to download the organized results.'); }
     });
   </script>
 </body>

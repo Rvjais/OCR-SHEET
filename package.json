@@ -1,0 +1,12 @@
+{
+  "name": "textlens-prototype",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/extraction.test.cjs",
+    "test:browser": "node tests/browser.cjs",
+    "test:batch": "node tests/batch-browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
