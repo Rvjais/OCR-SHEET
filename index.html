@@ -302,15 +302,18 @@
       $('viewer-page').textContent = `Page ${page} of ${totalPages}`;
       const report = document.reports.find(report => report.page === page);
       const url = document.isPDF ? document.previews[document.viewPage] : document.imageURL;
-      $('preview-content').replaceChildren();
+      const pageKey = `${document.id}:${page}`;
+      const samePage = $('output').dataset.pageKey === pageKey;
+      const samePreview = samePage && $('preview-content').firstElementChild?.getAttribute('src') === url;
+      if (!samePreview) $('preview-content').replaceChildren();
       $('preview').hidden = !url;
       $('preview-empty').hidden = Boolean(url);
-      if (url) {
+      if (url && !samePreview) {
         const image = new Image(); image.src = url;
         image.alt = document.isPDF ? `${document.file.name}, page ${page} of ${totalPages}` : document.file.name;
         image.onerror = () => { if (!image.parentNode) return; $('preview').hidden = true; $('preview-empty').hidden = false; $('preview-empty-title').textContent = 'Preview unavailable'; $('preview-empty-description').textContent = 'This image format could not be displayed. Try PNG or JPG.'; };
         $('preview-content').append(image);
-      } else {
+      } else if (!url) {
         $('preview-empty-title').textContent = document.error ? 'Preview unavailable' : 'PDF preview';
         $('preview-empty-description').textContent = document.error || (document.status === 'processing' ? 'Preparing this page…' : 'Extract the file to see its pages.');
       }
@@ -322,12 +325,12 @@
         for (let index = 0; index < totalPages; index++) $('page-select').add(new Option(`Page ${index + 1}`, String(index)));
       }
       $('page-select').value = String(document.viewPage);
-      $('page-select').disabled = busy;
-      $('previous-page').disabled = busy || document.viewPage === 0;
-      $('next-page').disabled = busy || document.viewPage >= totalPages - 1;
+      updatePageControls();
+      const sameText = $('output').value === (report?.text || '');
       setOutput(report?.text || '');
       $('output').readOnly = busy || !report;
-      $('output').scrollTop = 0;
+      if (!samePage || !sameText) $('output').scrollTop = 0;
+      $('output').dataset.pageKey = pageKey;
       $('empty-title').textContent = document.error && !report ? 'This page was not extracted' : report ? 'No text found on this page' : document.status === 'processing' ? 'Reading this file…' : 'Ready when you are';
       $('empty-description').textContent = document.error || (report ? 'Check the image quality and text language, then try again.' : 'Click Extract to read the selected files.');
       $('ready-label').textContent = report?.edited ? 'Edited — review changes' : report?.text ? 'Extraction complete' : document.status === 'processing' ? 'Processing' : document.error ? 'Not fully extracted' : report ? 'No text found' : 'Waiting to extract';
@@ -442,8 +445,36 @@
     function showPDFPage(index) {
       const document = currentDocument();
       if (!document || index < 0 || index >= totalPages) return;
+      if (busy && !pageAvailable(document, index)) return;
       document.viewPage = previewPage = index;
       renderCurrentPage();
+    }
+
+    function pageAvailable(document, index) {
+      return Boolean(document.previews[index] || document.reports.some(report => report.page === index + 1));
+    }
+
+    function adjacentPage(direction) {
+      const document = currentDocument();
+      if (!document?.isPDF) return -1;
+      for (let index = document.viewPage + direction; index >= 0 && index < totalPages; index += direction) {
+        if (!busy || pageAvailable(document, index)) return index;
+      }
+      return -1;
+    }
+
+    function updatePageControls() {
+      const document = currentDocument();
+      if (!document?.isPDF) return;
+      for (const option of $('page-select').options) {
+        const index = Number(option.value);
+        const report = document.reports.find(report => report.page === index + 1);
+        option.disabled = busy && !pageAvailable(document, index);
+        option.textContent = `Page ${index + 1}${busy ? report ? ' · Read' : document.previews[index] ? ' · Reading' : ' · Waiting' : ''}`;
+      }
+      $('page-select').disabled = busy && !Array.from($('page-select').options).some(option => !option.disabled);
+      $('previous-page').disabled = adjacentPage(-1) < 0;
+      $('next-page').disabled = adjacentPage(1) < 0;
     }
 
     function message(text, error = false) {
@@ -464,8 +495,8 @@
     function setOutput(text) {
       if ($('output').value !== text) $('output').value = text;
       $('empty').hidden = Boolean(text.trim());
-      $('copy').disabled = !text.trim() || busy;
-      $('download').disabled = !text.trim() || busy;
+      $('copy').disabled = !text.trim();
+      $('download').disabled = !text.trim();
       const words = text.trim() ? text.trim().split(/\s+/u).length : 0;
       $('counts').textContent = `${words.toLocaleString()} words · ${text.length.toLocaleString()} characters`;
       $('review-note').hidden = !text.trim();
@@ -477,11 +508,9 @@
       for (const id of ['dropzone', 'file-input', 'change-file', 'remove', 'language', 'printed-ocr', 'handwritten-ocr', 'ocr-quality']) $(id).disabled = value;
       $('output').setAttribute('aria-busy', String(value));
       $('output').readOnly = value || !$('output').value.trim();
-      $('copy').disabled = value || !$('output').value.trim();
-      $('download').disabled = value || !$('output').value.trim();
-      $('previous-page').disabled = value || previewPage === 0;
-      $('next-page').disabled = value || previewPage >= totalPages - 1;
-      $('page-select').disabled = value;
+      $('copy').disabled = !$('output').value.trim();
+      $('download').disabled = !$('output').value.trim();
+      updatePageControls();
       renderQueue();
     }
 
@@ -814,7 +843,7 @@
             const preview = await createPDFPreview(canvas);
             if (pagePreviews[number - 1]) URL.revokeObjectURL(pagePreviews[number - 1]);
             pagePreviews[number - 1] = preview;
-            if (number === 1) showPDFPage(0);
+            if (processingDocument.viewPage === number - 1) renderCurrentPage();
             if (useOCR) {
               const recognized = await recognizeImage(canvas);
               report = { ...report, ...recognized, method: usableNative ? 'hybrid' : 'ocr', notes: [...report.notes, ...recognized.notes] };
@@ -835,7 +864,6 @@
             page?.cleanup();
           }
           if (pagePreviews.length < number) pagePreviews[number - 1] = null;
-          if (number === 1 && !pagePreviews[0]) showPDFPage(0);
           const existing = pageReports.findIndex(item => item.page === number);
           if (existing >= 0) pageReports[existing] = report;
           else pageReports.push(report);
@@ -863,7 +891,7 @@
         document.previews = [];
         document.reports = [];
       }
-      document.viewPage = 0;
+      if (!resume) document.viewPage = 0;
       if (!resume) document.pageCount = document.isPDF ? null : 1;
       document.status = 'processing';
       document.provider = selectedProvider();
@@ -881,7 +909,7 @@
       $('ready-label').textContent = 'Processing';
       $('ready').classList.remove('done');
       progress(0, 'Preparing your file…');
-      totalPages = 1;
+      totalPages = document.pageCount || 1;
       ocrPage = 1;
       try {
         let result;
@@ -978,8 +1006,8 @@
 
     $('dropzone').addEventListener('click', () => $('file-input').click());
     $('change-file').addEventListener('click', () => $('file-input').click());
-    $('previous-page').addEventListener('click', () => showPDFPage(previewPage - 1));
-    $('next-page').addEventListener('click', () => showPDFPage(previewPage + 1));
+    $('previous-page').addEventListener('click', () => showPDFPage(adjacentPage(-1)));
+    $('next-page').addEventListener('click', () => showPDFPage(adjacentPage(1)));
     $('page-select').addEventListener('change', (event) => showPDFPage(Number(event.target.value)));
     $('file-input').addEventListener('change', (event) => { addFiles(event.target.files); event.target.value = ''; });
     let dragDepth = 0;
