@@ -47,7 +47,7 @@ rollback() {
     release=$previous
     export TEXTLENS_IMAGE
     TEXTLENS_IMAGE=$(cat "$previous/.image")
-    compose up -d --wait --wait-timeout 120 || echo 'Rollback also failed; inspect docker compose logs.' >&2
+    compose up -d --wait --wait-timeout 300 || echo 'Rollback also failed; inspect docker compose logs.' >&2
   else
     compose down || true
     echo 'No previous release exists. Fix the error and rerun the workflow.' >&2
@@ -58,7 +58,7 @@ export TEXTLENS_IMAGE=$image_ref
 compose config --quiet
 # Pull before stopping the current containers. Failed pulls leave them running.
 compose pull
-if ! compose up -d --wait --wait-timeout 120; then
+if ! compose up -d --wait --wait-timeout 300; then
   rollback
   exit 1
 fi
@@ -74,7 +74,7 @@ if ! curl --fail --silent --show-error --retry 8 --retry-all-errors \
   exit 1
 fi
 if ! compose exec -T api python -c \
-  'import json,sys; d=json.load(sys.stdin); assert d["status"]=="ok"; assert d["service"]=="textlens-handwriting"; assert d["version"]==sys.argv[1]; assert d["gemini"]["configured"]; assert not d["requires_access_token"]' \
+  'import json,sys; d=json.load(sys.stdin); assert d["status"]=="ok"; assert d["service"]=="textlens-handwriting"; assert d["version"]==sys.argv[1]; assert d["available"] and d["loaded"]; assert not d["requires_access_token"]' \
   "${image_ref##*:}" < "$release/.health.json"; then
   rollback
   exit 1

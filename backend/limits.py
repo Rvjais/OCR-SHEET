@@ -1,4 +1,4 @@
-"""Bound public OCR traffic before uploads are decoded or sent to Gemini."""
+"""Bound public OCR traffic before uploads are decoded or recognized locally."""
 from collections import deque
 from time import monotonic
 

@@ -164,11 +164,11 @@
       <div class="ocr-options">
         <fieldset class="recognition-modes"><legend>Recognition mode</legend><div class="mode-choices">
           <label class="mode-choice" for="printed-ocr"><input type="checkbox" id="printed-ocr"><span>Printed text<small>Fast, private extraction</small></span></label>
-          <label class="mode-choice" for="gemini-ocr"><input type="checkbox" id="gemini-ocr" checked><span>Printed + handwritten text<small>Enhanced recognition with Gemini</small></span></label>
+          <label class="mode-choice" for="handwritten-ocr"><input type="checkbox" id="handwritten-ocr" checked><span>Printed + handwritten text<small>Private handwriting recognition</small></span></label>
         </div></fieldset>
         <div class="settings" id="speed-setting"><label for="ocr-quality">Printed text quality</label><select id="ocr-quality"><option value="fast">Fast</option><option value="thorough">Thorough</option></select></div>
       </div>
-      <p class="recognition-note" id="gemini-notice">Pages are sent to Google for printed and handwritten text recognition.</p>
+      <p class="recognition-note" id="handwriting-notice">Pages are processed privately for printed and handwritten text. Review handwriting, dates and amounts against the original.</p>
       <div class="progress-wrap" id="progress-wrap" hidden><div class="progress-label"><span id="progress-label">Preparing…</span><span class="progress-status"><span id="progress-percent">0%</span><button type="button" class="secondary" id="cancel">Cancel</button></span></div><progress id="progress" max="100" value="0" aria-label="Extraction progress"></progress></div>
       <p class="message" id="message" role="status" aria-live="polite" hidden></p>
       <details class="quality" id="quality" hidden><summary id="quality-title">Review extraction</summary><p id="quality-summary"></p><ul id="quality-words" hidden></ul><p>OCR confidence is an engine estimate, not an accuracy guarantee. Check names, numbers, tables, and handwriting against the original.</p></details>
@@ -227,7 +227,7 @@
     let backendURL = null;
     let backendConnectionError = null;
     const Utils = ExtractionUtils;
-    const selectedProvider = () => $('gemini-ocr').checked ? 'gemini' : 'browser';
+    const selectedProvider = () => $('handwritten-ocr').checked ? 'local' : 'browser';
 
     const currentDocument = () => documents.find(document => document.id === selectedDocumentId);
     const pendingDocuments = () => documents.filter(document => !['done', 'empty'].includes(document.status));
@@ -451,7 +451,7 @@
 
     function setBusy(value) {
       busy = value;
-      for (const id of ['dropzone', 'file-input', 'change-file', 'remove', 'language', 'printed-ocr', 'gemini-ocr', 'ocr-quality']) $(id).disabled = value;
+      for (const id of ['dropzone', 'file-input', 'change-file', 'remove', 'language', 'printed-ocr', 'handwritten-ocr', 'ocr-quality']) $(id).disabled = value;
       $('output').setAttribute('aria-busy', String(value));
       $('output').readOnly = value || !$('output').value.trim();
       $('copy').disabled = value || !$('output').value.trim();
@@ -602,7 +602,7 @@
           if (!response.ok) continue;
           const health = await response.json();
           if (health.service !== 'textlens-handwriting') continue;
-          if (!health.gemini?.available || !health.gemini.configured) throw new Error('Handwriting recognition is temporarily unavailable. Choose printed text or try again later.');
+          if (!health.available) throw new Error('Handwriting recognition is temporarily unavailable. Choose printed text or try again later.');
           backendURL = base;
           return health;
         } catch (error) {
@@ -620,13 +620,13 @@
       }
       const prepared = prepareUpload(source);
       try {
-        let blob = await guarded(new Promise(resolve => prepared.canvas.toBlob(resolve, 'image/jpeg', .95)), 'Preparing the OCR image');
+        let blob = await guarded(new Promise(resolve => prepared.canvas.toBlob(resolve, 'image/png')), 'Preparing the OCR image');
         if (!blob) throw new Error('Could not prepare this page for OCR.');
         if (blob.size > 15 * 1024 * 1024) blob = await guarded(new Promise(resolve => prepared.canvas.toBlob(resolve, 'image/jpeg', .95)), 'Preparing the handwriting image');
         const form = new FormData();
         form.append('file', blob, blob.type === 'image/png' ? 'page.png' : 'page.jpg');
         form.append('language', $('language').value);
-        form.append('provider', 'gemini');
+        form.append('provider', 'local');
         progress(((ocrPage - 1) / totalPages) * 100, `Reading printed labels and handwritten values on page ${ocrPage} of ${totalPages}…`);
         let response;
         try { response = await guarded(fetch(`${backendURL}/api/ocr`, { method: 'POST', body: form, signal: extractionController.signal }), 'Handwriting recognition', 300000); }
@@ -641,12 +641,12 @@
         if (typeof data.text !== 'string' || !(Number.isFinite(data.confidence) || data.confidence === null) || !Array.isArray(data.uncertain) || !Array.isArray(data.words)) throw new Error('This page could not be read. Please try again.');
         const notes = Array.isArray(data.notes) ? data.notes.slice() : [];
         if (prepared.downscaled) notes.push('A large image was resized; inspect small handwritten values.');
-        return { text: Utils.cleanText(data.text), confidence: data.confidence, words: data.words, uncertain: data.uncertain, notes, engine: data.engine || 'Gemini' };
+        return { text: Utils.cleanText(data.text), confidence: data.confidence, words: data.words, uncertain: data.uncertain, notes, engine: data.engine || 'Local OCR' };
       } finally { prepared.canvas.width = 0; prepared.canvas.height = 0; }
     }
 
     async function recognizeImage(source) {
-      if (processingDocument?.provider === 'gemini') return recognizeHandwriting(source);
+      if (processingDocument?.provider === 'local') return recognizeHandwriting(source);
       const prepared = prepareImage(source);
       const canvases = [prepared.canvas];
       const notes = prepared.downscaled ? ['A large image was resized to fit browser memory limits; check small text.'] : [];
@@ -736,7 +736,7 @@
             const content = await guarded(page.getTextContent(), `Reading page ${number}`);
             const nativeText = Utils.textFromPage(content.items, base.transform);
             const usableNative = Utils.readableText(nativeText);
-            const backendOCR = processingDocument.provider === 'gemini';
+            const backendOCR = processingDocument.provider === 'local';
             let useOCR = backendOCR || !usableNative;
             try { if (usableNative && !backendOCR) useOCR = await hasRasterImages(page, pdfjs, base); }
             catch (error) {
@@ -925,15 +925,15 @@
     window.addEventListener('drop', (event) => event.preventDefault());
     $('extract').addEventListener('click', extract);
     function updateRecognitionMode() {
-      const gemini = selectedProvider() === 'gemini';
-      $('gemini-notice').hidden = !gemini;
-      $('speed-setting').hidden = gemini;
-      document.querySelector('.privacy span').textContent = gemini ? 'Gemini sends pages to Google' : 'Your files stay on this computer';
+      const handwriting = selectedProvider() === 'local';
+      $('handwriting-notice').hidden = !handwriting;
+      $('speed-setting').hidden = handwriting;
+      document.querySelector('.privacy span').textContent = handwriting ? 'Private OCR · No external AI services' : 'Your files stay on this computer';
       backendURL = null;
       backendConnectionError = null;
     }
-    for (const id of ['printed-ocr', 'gemini-ocr']) $(id).addEventListener('change', event => {
-      $(id === 'printed-ocr' ? 'gemini-ocr' : 'printed-ocr').checked = !event.target.checked;
+    for (const id of ['printed-ocr', 'handwritten-ocr']) $(id).addEventListener('change', event => {
+      $(id === 'printed-ocr' ? 'handwritten-ocr' : 'printed-ocr').checked = !event.target.checked;
       updateRecognitionMode();
     });
     $('language').addEventListener('change', releaseWorker);

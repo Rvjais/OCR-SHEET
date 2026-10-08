@@ -15,7 +15,6 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .ocr import OCRService, RECOGNIZERS
-from .gemini import GeminiService, GeminiError
 from .config import comma_separated_setting, load_server_config
 from .limits import PublicOCRLimitsMiddleware
 
@@ -74,14 +73,14 @@ def decode_image(data):
         raise HTTPException(400, 'The uploaded image is damaged or unreadable.') from None
 
 
-def create_app(service=None, gemini_service=None):
+def create_app(service=None):
     service = service or OCRService()
-    gemini_service = gemini_service or GeminiService()
 
     @asynccontextmanager
     async def lifespan(app):
+        if os.environ.get('OCR_PRELOAD', '0') == '1':
+            await run_in_threadpool(service.warmup)
         yield
-        gemini_service.close()
 
     app = FastAPI(title='TextLens OCR', lifespan=lifespan)
     access_token = os.environ.get('API_ACCESS_TOKEN', '').strip()
@@ -116,14 +115,14 @@ def create_app(service=None, gemini_service=None):
 
     @app.get('/api/health')
     async def health():
-        return {'status': 'ok', 'service': 'textlens-handwriting', **service.health(), 'gemini': gemini_service.health(),
+        return {'status': 'ok', 'service': 'textlens-handwriting', **service.health(),
                 'requires_access_token': bool(access_token), 'version': os.environ.get('APP_VERSION', 'development')}
 
     @app.post('/api/ocr', dependencies=[Depends(authorize_ocr)])
     async def recognize(file: UploadFile = File(...), language: str = Form('eng'),
-                        provider: str = Form('local'), api_key: str = Form('')):
+                        provider: str = Form('local')):
         try:
-            if provider not in {'local', 'gemini'}:
+            if provider != 'local':
                 raise HTTPException(400, 'Unsupported OCR provider.')
             if language not in RECOGNIZERS:
                 raise HTTPException(400, 'Unsupported text language.')
@@ -135,19 +134,10 @@ def create_app(service=None, gemini_service=None):
             image = await run_in_threadpool(decode_image, data)
             del data
             try:
-                if provider == 'gemini':
-                    try:
-                        return await run_in_threadpool(gemini_service.recognize, image, language, api_key)
-                    except GeminiError as error:
-                        logger.warning('Gemini OCR failed with status %s', error.status)
-                        raise HTTPException(error.status, str(error)) from None
                 return await run_in_threadpool(service.recognize, image, language)
             except HTTPException:
                 raise
             except Exception:
-                if provider == 'gemini':
-                    logger.error('Gemini recognition failed unexpectedly')
-                    raise HTTPException(502, 'Text recognition is temporarily unavailable. Please try again later.') from None
                 logger.exception('Local handwriting recognition failed')
                 raise HTTPException(503, 'Handwriting recognition is temporarily unavailable. Choose printed text or try again later.') from None
             finally:

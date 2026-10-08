@@ -34,7 +34,7 @@ class DeployScriptTests(unittest.TestCase):
         self.old_image = 'ghcr.io/example/backend:' + 'a' * 40
         self.new_image = 'ghcr.io/example/backend:' + 'b' * 40
         (self.old / '.image').write_text(self.old_image + '\n', encoding='utf-8')
-        (self.root / '.env').write_text('GEMINI_API_KEY=test\n', encoding='utf-8')
+        (self.root / '.env').write_text('OCR_CPU_THREADS=4\n', encoding='utf-8')
         self.env = {**os.environ, 'TEXTLENS_ROOT': shell_path(self.root),
                     'MOCK_LOG': shell_path(self.root / 'commands'),
                     'TEST_PYTHON': str(Path(os.sys.executable).resolve())}
@@ -71,7 +71,7 @@ exit 1
 if [[ ${MOCK_FAILURE:-} == https ]]; then exit 22; fi
 revision=${TEXTLENS_IMAGE##*:}
 if [[ ${MOCK_FAILURE:-} == wrong_revision ]]; then revision=wrong; fi
-printf '{"status":"ok","service":"textlens-handwriting","version":"%s","gemini":{"configured":true},"requires_access_token":false}\\n' "$revision"
+printf '{"status":"ok","service":"textlens-handwriting","version":"%s","available":true,"loaded":true,"requires_access_token":false}\\n' "$revision"
 ''')
 
     def fake(self, name, body):

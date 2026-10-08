@@ -10,7 +10,7 @@ def load_server_config(path=None):
     for line in path.read_text(encoding='utf-8-sig').splitlines():
         name, separator, value = line.strip().partition('=')
         name = name.strip()
-        if not separator or name not in {'GEMINI_API_KEY', 'FRONTEND_ORIGINS', 'ALLOWED_HOSTS', 'API_ACCESS_TOKEN'}:
+        if not separator or name not in {'FRONTEND_ORIGINS', 'ALLOWED_HOSTS', 'API_ACCESS_TOKEN', 'OCR_PRELOAD', 'OCR_CPU_THREADS', 'OCR_MODEL_DIR'}:
             continue
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:

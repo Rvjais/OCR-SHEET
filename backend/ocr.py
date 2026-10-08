@@ -3,9 +3,15 @@ from collections.abc import Mapping
 import importlib.util
 import math
 import os
+from pathlib import Path
 import threading
 
 
+DETECTOR = 'PP-OCRv5_mobile_det'
+ORIENTATION_MODELS = {
+    'doc_orientation_classify': 'PP-LCNet_x1_0_doc_ori',
+    'textline_orientation': 'PP-LCNet_x1_0_textline_ori',
+}
 RECOGNIZERS = {
     'eng': 'en_PP-OCRv5_mobile_rec',
     'eng+spa': 'latin_PP-OCRv5_mobile_rec',
@@ -66,7 +72,7 @@ def normalize_prediction(prediction):
         'words': [{'text': region['text'], 'confidence': region['confidence']} for region in regions],
         'uncertain': [{'text': region['text'], 'confidence': region['confidence']} for region in regions if region['confidence'] < 85],
         'regions': regions,
-        'notes': ['Handwritten invoice values need review against the original, especially amounts, dates, and IDs.'],
+        'notes': ['Review handwriting, amounts, dates and IDs against the original, even when confidence is high.'],
         'engine': 'PaddleOCR PP-OCRv5', 'confidence_unit': 'region',
     }
 
@@ -87,20 +93,33 @@ class OCRService:
     def _load(self, language):
         recognizer = RECOGNIZERS[language]
         if self._engine is None or self._recognizer != recognizer:
+            # Explicit local paths prevent inference from fetching missing weights.
+            # Installation/build is the only step allowed to download models.
+            model_options = {}
+            model_root = os.environ.get('OCR_MODEL_DIR', '').strip() or str(Path(__file__).resolve().parent.parent / 'models')
+            for prefix, name in {
+                'text_detection': DETECTOR, 'text_recognition': recognizer,
+                **ORIENTATION_MODELS,
+            }.items():
+                path = Path(model_root) / name
+                if not (path / 'inference.yml').is_file() or not (path / 'inference.pdiparams').is_file():
+                    raise RuntimeError(f'Missing installed OCR model: {name}. Run python -m backend.download_models.')
+                model_options[f'{prefix}_model_dir'] = str(path.resolve())
+            os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
             from paddleocr import PaddleOCR
-            # Keep one model set in memory. Model weights download on first use;
-            # uploaded documents are passed as arrays and are never saved.
+            # Keep one model set in memory and serialize CPU inference.
             self._engine = None
             self._engine = PaddleOCR(
-                text_detection_model_name='PP-OCRv5_mobile_det',
+                text_detection_model_name=DETECTOR,
                 text_recognition_model_name=recognizer,
                 use_doc_orientation_classify=True,
                 use_doc_unwarping=False,
                 use_textline_orientation=True,
                 textline_orientation_batch_size=4,
                 text_recognition_batch_size=4,
-                device='cpu', cpu_threads=min(4, os.cpu_count() or 1),
+                device='cpu', cpu_threads=max(1, min(int(os.environ.get('OCR_CPU_THREADS', '4')), os.cpu_count() or 1)),
                 enable_mkldnn=False,
+                **model_options,
             )
             self._recognizer = recognizer
         return self._engine
@@ -119,6 +138,16 @@ class OCRService:
             # handwritten value; it is retained and flagged instead.
             resized = image.copy()
             resized.thumbnail((2400, 2400))
+            # Very small scans lose decimal points and faint strokes at the
+            # recognizer's line resolution. Bounded Lanczos upsampling helped
+            # on the invoice sample; it does not recover missing source detail.
+            upscaled = max(resized.size) < 1280
+            if upscaled:
+                from PIL import Image
+                scale = min(2.0, 1280 / max(resized.size))
+                enlarged = resized.resize((round(resized.width * scale), round(resized.height * scale)), Image.Resampling.LANCZOS)
+                resized.close()
+                resized = enlarged
             try:
                 pixels = np.ascontiguousarray(np.asarray(resized)[:, :, ::-1])
                 predictions = list(engine.predict(pixels, text_rec_score_thresh=0.0, text_det_limit_side_len=1600, text_det_limit_type='max'))
@@ -127,6 +156,8 @@ class OCRService:
             if not predictions:
                 return normalize_prediction({})
             result = normalize_prediction(predictions[0])
+            if upscaled:
+                result['notes'].append('A small image was enlarged for recognition. A higher-resolution original can improve handwriting and punctuation.')
             if max(image.size) > 2400:
                 result['notes'].append('This page was resized for CPU inference. Review small handwritten values.')
             return result

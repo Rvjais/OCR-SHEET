@@ -1,6 +1,7 @@
 **
 !Dockerfile
-!requirements-gemini.txt
+!requirements.txt
+!requirements-web.txt
 !backend/
 !backend/**
 !index.html

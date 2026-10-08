@@ -1,4 +1,6 @@
 from io import BytesIO
+import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -59,6 +61,31 @@ class BackendTests(unittest.TestCase):
     def test_unsupported_language_is_rejected(self):
         response = self.client.post('/api/ocr', files={'file': ('page.png', image_bytes(), 'image/png')}, data={'language': 'unknown'})
         self.assertEqual(response.status_code, 400)
+
+    def test_only_local_recognition_is_accepted(self):
+        response = self.client.post('/api/ocr', files={'file': ('page.png', image_bytes(), 'image/png')}, data={'provider': 'cloud'})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.service.calls, [])
+        self.assertNotIn('api_key', self.client.get('/openapi.json').text)
+
+    def test_missing_installed_models_fail_before_any_model_download(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'OCR_MODEL_DIR': folder}):
+            with self.assertRaisesRegex(RuntimeError, 'Missing installed OCR model'):
+                OCRService().warmup()
+
+    def test_small_scans_preserve_color_and_are_bounded_when_enlarged(self):
+        class Engine:
+            def predict(self, pixels, **options):
+                self.shape = pixels.shape
+                self.pixel = pixels[0, 0].tolist()
+                return [{'rec_texts': ['1586.52'], 'rec_scores': [.8]}]
+        engine = Engine()
+        with patch.object(OCRService, '_load', return_value=engine), Image.new('RGB', (517, 633), (50, 70, 250)) as image:
+            result = OCRService().recognize(image, 'eng')
+        self.assertEqual(engine.shape[:2], (1266, 1034))
+        self.assertEqual(engine.pixel, [250, 70, 50])
+        self.assertEqual(result['text'], '1586.52')
+        self.assertEqual(result['uncertain'][0]['text'], '1586.52')
 
     def test_upload_and_pixel_limits(self):
         with patch('backend.app.MAX_UPLOAD_BYTES', 20):

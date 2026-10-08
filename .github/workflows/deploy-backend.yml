@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install test dependencies
-        run: pip install -r requirements-gemini.txt numpy==2.3.5
+        run: pip install -r requirements-web.txt numpy==2.3.5
       - name: Test backend and extraction rules
         run: |
           python -m unittest discover -s tests -p 'test_*.py' -v
@@ -43,7 +43,7 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 35
     permissions:
       contents: read
       packages: write
@@ -69,20 +69,27 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
         run: |
           docker run -d --name textlens-smoke -p 127.0.0.1:18000:8000 --read-only \
-            --tmpfs /tmp:size=128m --cap-drop ALL --security-opt no-new-privileges:true \
-            -e API_ACCESS_TOKEN=smoke-test-token -e GEMINI_API_KEY=smoke-test-key "$IMAGE_REF"
+            --tmpfs /tmp:size=256m --cap-drop ALL --security-opt no-new-privileges:true \
+            -e API_ACCESS_TOKEN=smoke-test-token "$IMAGE_REF"
           trap 'docker rm -f textlens-smoke >/dev/null' EXIT
-          for attempt in {1..30}; do
+          for attempt in {1..90}; do
             echo "Health check attempt $attempt"
             if curl -fsS http://127.0.0.1:18000/api/health > /tmp/health.json; then break; fi
             sleep 2
           done
-          python -c 'import json,os; d=json.load(open("/tmp/health.json")); assert d["version"]==os.environ["GITHUB_SHA"]; assert d["requires_access_token"]'
+          python -c 'import json,os; d=json.load(open("/tmp/health.json")); assert d["version"]==os.environ["GITHUB_SHA"]; assert d["requires_access_token"]; assert d["available"] and d["loaded"]'
           status=$(curl -s -o /dev/null -w '%{http_code}' \
             -F 'file=@Dockerfile;type=image/png' http://127.0.0.1:18000/api/ocr)
           test "$status" = 401
-          GEMINI_API_KEY=test API_ACCESS_TOKEN=test TEXTLENS_IMAGE="$IMAGE_REF" \
+          TEXTLENS_IMAGE="$IMAGE_REF" \
             docker compose -f deploy/compose.yml config --quiet
+      - name: Verify real OCR without network access
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          docker run --rm -i --network none --read-only --tmpfs /tmp:size=256m \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            "$IMAGE_REF" python - < tests/smoke-local-ocr.py
       - name: Publish image to GitHub Container Registry
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

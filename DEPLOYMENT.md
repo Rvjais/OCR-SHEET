@@ -9,9 +9,9 @@
 | Container base | `python:3.12-slim-bookworm`, Debian with Python 3.12 |
 | Image registry | `ghcr.io/rvjais/ocr-sheet-backend:<commit-sha>` |
 | Reverse proxy | Existing OpenLiteSpeed, forwarding to `127.0.0.1:8010` |
-| Fixed model | `gemini-3.1-pro-preview`, defined in `backend/gemini.py` |
+| Local models | PP-OCRv5 detector and handwriting-capable recognizers, defined in `backend/ocr.py` |
 
-The host remains AlmaLinux. The container runs Gemini's web dependencies without installing PaddleOCR models. Browser printed-text OCR continues working; Python/Paddle handwriting is not included in this image.
+The host remains AlmaLinux. Docker installs PaddleOCR and bundles the model weights for every supported language during the image build. Recognition uses CPU inference on this VPS, with no external OCR service or API key. The backend loads the English models before accepting requests.
 
 No domain purchase is needed. [sslip.io](https://sslip.io/) resolves the IP-based hostname to this VPS, and Let's Encrypt supplies the HTTPS certificate. This depends on sslip.io availability and retaining this VPS IP. Existing websites continue using the same OpenLiteSpeed listeners.
 
@@ -23,7 +23,7 @@ flowchart LR
     Deploy --> API[FastAPI container on AlmaLinux]
     Vercel[Vercel frontend] --> Proxy[OpenLiteSpeed HTTPS]
     Proxy --> API
-    API --> Gemini[Gemini 3.1 Pro Preview]
+    API --> OCR[Local PaddleOCR models]
 ```
 
 ## One-time VPS setup
@@ -44,7 +44,7 @@ Edit `/opt/textlens/.env`:
 ```dotenv
 BACKEND_DOMAIN=72-61-224-90.sslip.io
 FRONTEND_ORIGINS=https://ocr-sheet-topaz.vercel.app
-GEMINI_API_KEY=YOUR_GEMINI_KEY
+OCR_CPU_THREADS=4
 PUBLIC_OCR_PER_MINUTE=12
 PUBLIC_OCR_PER_DAY=500
 PUBLIC_OCR_CONCURRENT=2
@@ -52,9 +52,9 @@ PUBLIC_OCR_CONCURRENT=2
 
 Keep the file owned by `textlens-deploy` with mode 600. Do not commit credentials or put them in the frontend. A Git-ignored local `.env.production` can hold your private backup.
 
-The app offers tick boxes for **Printed text** and **Printed + handwritten text**, with one mode active at a time. Gemini uses the stored key automatically and the model fixed in `backend/gemini.py`. Users do not enter tokens, keys or model IDs. Development and deployment status are kept out of the product interface. Operators can check `https://72-61-224-90.sslip.io/api/health` for `status: ok` and the deployed commit in `version`.
+The app offers tick boxes for **Printed text** and **Printed + handwritten text**, with one mode active at a time. Handwriting uses the bundled local models automatically; printed mode runs Tesseract in the browser. Users do not enter tokens, keys or model IDs. Development and deployment status are kept out of the product interface. Operators can check `https://72-61-224-90.sslip.io/api/health` for `status: ok` and the deployed commit in `version`.
 
-The public endpoint defaults to 12 OCR requests per minute, 500 requests per rolling 24 hours, and two concurrent requests, across the server. These limits apply before images are decoded or sent to Gemini; excess requests receive 429 with a Retry-After header. Adjust the environment values above to match expected usage. Counters are held in this single container's memory and reset on restart/deployment. They are usage bounds, not individual user authentication.
+The public endpoint defaults to 12 OCR requests per minute, 500 requests per rolling 24 hours, and two concurrent requests, across the server. These limits apply before images are decoded or recognized locally; excess requests receive 429 with a Retry-After header. Adjust the environment values above to match expected usage. Counters are held in this single container's memory and reset on restart/deployment. They are usage bounds, not individual user authentication.
 
 ## HTTPS on the existing OpenLiteSpeed server
 
@@ -123,9 +123,9 @@ The pipeline publishes an image on pushes to `main` and manual runs on `main`. P
 
 Push to `main`, or use Actions → **Test and deploy OCR backend** → Run workflow.
 
-The workflow tests the code, checks scripts, builds a non-root image, smoke-tests its production filesystem restrictions and authentication, and publishes it. Over verified SSH it transfers only Compose and deploy scripts, pulls the image, and starts the container. Gemini credentials remain in `/opt/textlens/.env`.
+The workflow tests the code, checks scripts, builds a non-root image, smoke-tests its production filesystem restrictions and authentication, and publishes it. Over verified SSH it transfers only Compose and deploy scripts, pulls the image, and starts the container. It also performs real invoice OCR in a read-only container with network access disabled before publishing. No OCR API credentials are needed. Old cloud-key entries in the VPS configuration are ignored and can be deleted.
 
-Success requires a healthy container and an HTTPS health response containing `status: ok`, the expected commit, a configured Gemini key, and `requires_access_token: false`. No paid Gemini request is made during deployment. Failed pulls preserve the current release; failures after replacement restore the previous image. The shared `.env` and one-time proxy configuration are not rolled back. Container replacement can cause a brief interruption.
+Success requires a healthy container and an HTTPS health response containing `status: ok`, the expected commit, `available: true`, `loaded: true`, and `requires_access_token: false`. Startup has up to five minutes to initialize the local models. Failed pulls preserve the current release; failures after replacement restore the previous image. The shared `.env` and one-time proxy configuration are not rolled back. Container replacement can cause a brief interruption.
 
 The frontend's API address is in `runtime-config.js`. Vercel must deploy it with `index.html` and `extraction-utils.js`. Local development keeps local discovery.
 
@@ -156,6 +156,6 @@ If the image is no longer cached, rerun its workflow or temporarily log in with 
 | HTTPS fails | DNS, OpenLiteSpeed mappings, certificate/renewal, firewall |
 | CORS error | Exact `FRONTEND_ORIGINS` and latest Vercel version |
 | Server limit 429 | Wait according to Retry-After, or adjust the VPS public usage limits |
-| Gemini 429 | Google project quota/billing |
+| OCR unavailable | Container logs, bundled model files, RAM and CPU availability |
 
-Previous live tests hit Gemini's free-tier quota limit. Health and deployment can succeed while OCR remains unavailable until Google's quota permits requests.
+The new backend image is larger because it contains PaddlePaddle and all model weights. The first build and pull will take longer. Inference is serialized to bound CPU and memory use; two admitted requests can queue for the same engine. Adjust `OCR_CPU_THREADS` to fit the VPS alongside its existing websites. Health checks confirm model loading; the offline CI smoke test checks actual recognition. Handwriting still needs review, especially on small or blurred scans.
