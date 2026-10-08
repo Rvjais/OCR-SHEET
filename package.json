@@ -6,7 +6,8 @@
     "test:browser": "node tests/browser.cjs",
     "test:batch": "node tests/batch-browser.cjs",
     "test:handwriting": "node tests/handwriting-browser.cjs",
-    "test:providers": "node tests/providers-browser.cjs"
+    "test:providers": "node tests/providers-browser.cjs",
+    "test:long-pdf": "node tests/long-pdf-browser.cjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

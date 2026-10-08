@@ -40,6 +40,8 @@ The [official English model documentation](https://www.paddleocr.ai/main/en/vers
 
 Upload multiple images and PDFs together. Each file retains its own pages, preview and editable results. Select a file and page to review the matching source. **Add files** keeps existing results; completed batches can be re-extracted. A failed file does not stop the remaining files. Cancel keeps completed pages and stops later requests; an inference already running on the backend may finish.
 
+Long PDFs use compact previews separate from the full OCR image and release decoded PDF resources between pages. A slow render receives up to five minutes of active tab time, then one retry at a smaller resolution. Hidden-tab time does not count toward the render timeout, since browsers can pause PDF.js animation frames. If a page still fails, later pages continue and the missing page is marked explicitly. Click **Extract** again to retry failed/unprocessed PDF pages while retaining completed text and edits. Changing language, recognition mode or quality starts a fresh extraction; **Re-extract all** also replaces the previous results.
+
 **Copy** and **Save text** export the current page. **Copy all** and **Save all** export files in upload order with filename/page headings and notices for failed or unprocessed pages. Identical filenames remain separate entries.
 
 Selectable PDF text is read using its displayed positions. Mixed PDFs combine visible OCR with exact selectable text while retaining recognized handwritten suffixes next to printed labels. Handwriting mode always reads the visible page, even when it has a text layer.
@@ -63,6 +65,7 @@ npm run test:browser
 npm run test:batch
 npm run test:handwriting
 npm run test:providers
+npm run test:long-pdf
 ```
 
 Browser tests use installed Chrome. Set `TEXTLENS_BROWSER=msedge`, `TEXTLENS_URL` or `TEXTLENS_TEST_DIR` to change the browser, app URL or fixture directory. Synthetic tests cover identifiers, decimal amounts, PDFs, mixed handwriting results, editing/export, cancellation and responsive layout; they are regression tests, not a handwriting accuracy benchmark.

@@ -17,7 +17,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -29,6 +29,20 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_*.py' -v
           npm test
+      - name: Test long PDF rendering and recovery
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          pip install reportlab==5.0.1
+          python tests/create-fixtures.py
+          python -m http.server 8000 > /tmp/textlens-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid"' EXIT
+          for attempt in {1..15}; do
+            if curl -fsS http://127.0.0.1:8000/ >/dev/null; then break; fi
+            sleep 1
+          done
+          TEXTLENS_BROWSER=chromium npm run test:long-pdf
       - name: Check deployment scripts
         run: |
           if ! command -v shellcheck >/dev/null; then

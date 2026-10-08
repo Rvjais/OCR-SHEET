@@ -61,6 +61,12 @@ for _ in range(2):
     c.showPage()
 c.save()
 
+c = canvas.Canvas(str(target / 'scanned-40-pages.pdf'), pagesize=(700, 250))
+for number in range(1, 41):
+    c.drawImage(str(target / 'numbers.png'), 0, 0, width=700, height=250)
+    c.showPage()
+c.save()
+
 c = canvas.Canvas(str(target / 'pages.pdf'))
 for label, code in [('FIRST', 'PAGE-00111'), ('SECOND', 'PAGE-00222')]:
     c.setFont('Helvetica', 20)

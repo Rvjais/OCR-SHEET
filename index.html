@@ -367,16 +367,39 @@
       renderQueue();
     }
 
-    function guarded(promise, label, milliseconds = 120000) {
+    function guarded(promise, label, milliseconds = 120000, { pauseWhenHidden = false } = {}) {
       const signal = extractionController?.signal;
       return new Promise((resolve, reject) => {
+        let timer, started, remaining = milliseconds, settled = false;
         const abort = () => finish(reject, signal.reason || new DOMException('Extraction cancelled.', 'AbortError'));
-        const timer = setTimeout(() => finish(reject, new Error(`${label} timed out. Try again or use a smaller file.`)), milliseconds);
+        const timeout = () => {
+          const error = new Error(`${label} timed out. Please retry this page.`);
+          error.name = 'TimeoutError';
+          finish(reject, error);
+        };
+        function schedule() {
+          if (settled) return;
+          if (timer !== undefined) {
+            clearTimeout(timer);
+            remaining -= performance.now() - started;
+            timer = undefined;
+          }
+          // PDF.js uses animation frames for display rendering; hidden tabs
+          // pause these frames. Only charge active rendering time to its limit.
+          if (pauseWhenHidden && document.hidden) return;
+          started = performance.now();
+          timer = setTimeout(timeout, Math.max(0, remaining));
+        }
         function finish(callback, value) {
+          if (settled) return;
+          settled = true;
           clearTimeout(timer);
           signal?.removeEventListener('abort', abort);
+          if (pauseWhenHidden) document.removeEventListener('visibilitychange', schedule);
           callback(value);
         }
+        if (pauseWhenHidden) document.addEventListener('visibilitychange', schedule);
+        schedule();
         Promise.resolve(promise).then(value => finish(resolve, value), error => finish(reject, error instanceof Error ? error : new Error(String(error))));
         if (signal?.aborted) { abort(); return; }
         signal?.addEventListener('abort', abort, { once: true });
@@ -713,12 +736,48 @@
       return false;
     }
 
+    async function renderPDFPage(page, scale, number) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+        let task;
+        try {
+          task = page.render({ canvasContext: canvas.getContext('2d', { alpha: false }), viewport, background: '#ffffff' });
+          await guarded(task.promise, `Rendering page ${number}`, 300000, { pauseWhenHidden: true });
+          return { canvas, scale, retried: attempt > 0 };
+        } catch (error) {
+          task?.cancel();
+          // Wait until rendering releases the canvas before cleanup or retry.
+          if (task) await task.promise.catch(() => {});
+          canvas.width = 0; canvas.height = 0;
+          if (extractionController?.signal.aborted || error.name !== 'TimeoutError' || attempt === 1) throw error;
+          scale *= .7;
+          progress(((number - 1) / totalPages) * 100, `Retrying a smaller render of page ${number} of ${totalPages}…`);
+          page.cleanup();
+        }
+      }
+    }
+
+    async function createPDFPreview(source) {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, 1200 / Math.max(source.width, source.height));
+      canvas.width = Math.ceil(source.width * scale); canvas.height = Math.ceil(source.height * scale);
+      try {
+        canvas.getContext('2d', { alpha: false }).drawImage(source, 0, 0, canvas.width, canvas.height);
+        const blob = await guarded(new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .94)), 'Creating the preview');
+        if (!blob) throw new Error('Could not create a preview for this PDF page.');
+        return URL.createObjectURL(blob);
+      } finally { canvas.width = 0; canvas.height = 0; }
+    }
+
     async function extractPDF(file) {
       const pdfjs = await guarded(loadPDF(), 'Loading PDF tools', 60000);
       const loadingTask = pdfjs.getDocument({
         data: new Uint8Array(await guarded(file.arrayBuffer(), 'Reading the file')),
         cMapUrl: `${PDF_BASE}cmaps/`, cMapPacked: true,
-        standardFontDataUrl: `${PDF_BASE}standard_fonts/`, wasmUrl: `${PDF_BASE}wasm/`
+        standardFontDataUrl: `${PDF_BASE}standard_fonts/`, wasmUrl: `${PDF_BASE}wasm/`,
+        canvasMaxAreaInBytes: 32 * 1024 * 1024
       });
       let pdf;
       try {
@@ -727,6 +786,9 @@
         processingDocument.pageCount = totalPages;
         renderCurrentPage();
         for (let number = 1; number <= totalPages; number++) {
+          if (extractionController.signal.aborted) throw extractionController.signal.reason;
+          const previous = pageReports.find(report => report.page === number);
+          if (previous && !previous.failed && !previous.notes.some(note => /partially read/.test(note))) continue;
           ocrPage = number;
           progress(((number - 1) / totalPages) * 100, `Reading page ${number} of ${totalPages}…`);
           let page, canvas, report = { page: number, text: '', method: 'native', notes: [], uncertain: [] };
@@ -745,17 +807,13 @@
             }
             report.text = usableNative ? nativeText : '';
             const desiredScale = useOCR ? 300 / 72 : 1.5;
-            const scale = Math.min(desiredScale, (backendOCR ? 2400 : 4096) / Math.max(base.width, base.height), Math.sqrt(10000000 / (base.width * base.height)));
-            const viewport = page.getViewport({ scale });
-            canvas = document.createElement('canvas');
-            canvas.width = Math.ceil(viewport.width);
-            canvas.height = Math.ceil(viewport.height);
-            const renderTask = page.render({ canvasContext: canvas.getContext('2d'), viewport, background: '#ffffff' });
-            try { await guarded(renderTask.promise, `Rendering page ${number}`); }
-            catch (error) { renderTask.cancel(); throw error; }
-            const blob = await guarded(new Promise((resolve) => canvas.toBlob(resolve, 'image/png')), 'Creating the preview');
-            if (!blob) throw new Error('Could not create a preview for this PDF page.');
-            pagePreviews[number - 1] = URL.createObjectURL(blob);
+            let scale = Math.min(desiredScale, (backendOCR ? 2400 : 4096) / Math.max(base.width, base.height), Math.sqrt(10000000 / (base.width * base.height)));
+            const rendered = await renderPDFPage(page, scale, number);
+            canvas = rendered.canvas; scale = rendered.scale;
+            if (rendered.retried) report.notes.push('This page needed a smaller render after a timeout; inspect small text.');
+            const preview = await createPDFPreview(canvas);
+            if (pagePreviews[number - 1]) URL.revokeObjectURL(pagePreviews[number - 1]);
+            pagePreviews[number - 1] = preview;
             if (number === 1) showPDFPage(0);
             if (useOCR) {
               const recognized = await recognizeImage(canvas);
@@ -769,7 +827,7 @@
               }
             }
           } catch (error) {
-            if (extractionController.signal.aborted || /timed out/i.test(error.message)) throw error;
+            if (extractionController.signal.aborted || error.name === 'AbortError') throw error;
             report.notes.push(`This page was only partially read: ${error.message || String(error)}.`);
             if (!report.text) report.failed = true;
           } finally {
@@ -778,10 +836,16 @@
           }
           if (pagePreviews.length < number) pagePreviews[number - 1] = null;
           if (number === 1 && !pagePreviews[0]) showPDFPage(0);
-          pageReports.push(report);
+          const existing = pageReports.findIndex(item => item.page === number);
+          if (existing >= 0) pageReports[existing] = report;
+          else pageReports.push(report);
+          pageReports.sort((a, b) => a.page - b.page);
           renderCurrentPage();
           renderQueue();
           progress(number / totalPages * 100, `Read ${number} of ${totalPages} pages`);
+          // No render is active here. Release shared decoded images/fonts as
+          // well as page-local resources instead of retaining an entire scan.
+          await guarded(pdf.cleanup(), 'Releasing PDF page memory');
         }
         return { hasText: pageReports.some(report => Utils.readableText(report.text)) };
       } finally {
@@ -791,18 +855,25 @@
 
     async function extractDocument(document) {
       processingDocument = document;
-      for (const url of document.previews) if (url) URL.revokeObjectURL(url);
-      document.previews = [];
-      document.reports = [];
+      const resume = document.isPDF && ['partial', 'error', 'cancelled'].includes(document.status)
+        && document.provider === selectedProvider() && document.language === $('language').value
+        && document.quality === $('ocr-quality').value && document.reports.length > 0;
+      if (!resume) {
+        for (const url of document.previews) if (url) URL.revokeObjectURL(url);
+        document.previews = [];
+        document.reports = [];
+      }
       document.viewPage = 0;
-      document.pageCount = document.isPDF ? null : 1;
+      if (!resume) document.pageCount = document.isPDF ? null : 1;
       document.status = 'processing';
       document.provider = selectedProvider();
+      document.language = $('language').value;
+      document.quality = $('ocr-quality').value;
       document.error = '';
       selectDocument(document.id);
       extractionController = new AbortController();
       $('quality').hidden = true;
-      setOutput('');
+      if (!resume) setOutput('');
       message('');
       $('progress-wrap').hidden = false;
       $('empty-title').textContent = 'Reading your file…';
@@ -833,7 +904,7 @@
         }
         const partial = pageReports.some(report => report.failed || report.notes.some(note => /partially read/.test(note)));
         document.status = partial ? 'partial' : result.hasText ? 'done' : 'empty';
-        if (partial) document.error = 'Some pages could not be fully read. Retry this file to try again.';
+        if (partial) document.error = 'Some pages could not be fully read. Completed pages are kept; retry to read the unfinished pages.';
         renderCurrentPage();
         renderQuality();
         progress(100, 'Complete');
