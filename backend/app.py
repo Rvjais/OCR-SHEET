@@ -17,6 +17,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .ocr import OCRService, RECOGNIZERS
 from .gemini import GeminiService, GeminiError
 from .config import comma_separated_setting, load_server_config
+from .limits import PublicOCRLimitsMiddleware
 
 load_server_config()
 
@@ -86,6 +87,10 @@ def create_app(service=None, gemini_service=None):
     access_token = os.environ.get('API_ACCESS_TOKEN', '').strip()
     app.state.ocr_service = service
     app.add_middleware(UploadLimitMiddleware)
+    app.add_middleware(PublicOCRLimitsMiddleware,
+                       per_minute=int(os.environ.get('PUBLIC_OCR_PER_MINUTE', '0')),
+                       per_day=int(os.environ.get('PUBLIC_OCR_PER_DAY', '0')),
+                       concurrent=int(os.environ.get('PUBLIC_OCR_CONCURRENT', '0')))
     app.add_middleware(CORSMiddleware, allow_origins=comma_separated_setting('FRONTEND_ORIGINS'), allow_origin_regex=r'https?://(?:localhost|127\.0\.0\.1)(?::\d+)?', allow_methods=['GET', 'POST'], allow_headers=['Content-Type', 'Authorization'])
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=comma_separated_setting('ALLOWED_HOSTS', ['localhost', '127.0.0.1', '[::1]']))
 
@@ -111,7 +116,7 @@ def create_app(service=None, gemini_service=None):
 
     @app.get('/api/health')
     async def health():
-        return {'service': 'textlens-handwriting', **service.health(), 'gemini': gemini_service.health(),
+        return {'status': 'ok', 'service': 'textlens-handwriting', **service.health(), 'gemini': gemini_service.health(),
                 'requires_access_token': bool(access_token), 'version': os.environ.get('APP_VERSION', 'development')}
 
     @app.post('/api/ocr', dependencies=[Depends(authorize_ocr)])

@@ -166,13 +166,13 @@
       </div>
       <div class="gemini-settings" id="gemini-settings" hidden>
         <div class="gemini-fields">
-          <div class="settings"><label for="gemini-key">Gemini API key</label><input id="gemini-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste key, or use server key" maxlength="256"></div>
+          <div class="settings" id="gemini-key-setting"><label for="gemini-key">Gemini API key</label><input id="gemini-key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste key, or use server key" maxlength="256"></div>
           <div class="settings"><label for="gemini-model">Gemini model</label><input id="gemini-model" value="gemini-3.1-pro-preview" placeholder="Use server default" spellcheck="false" maxlength="87"></div>
         </div>
-        <p>Gemini reads printed and handwritten text. Extract sends each page to Google through the Python server and may use paid API quota. Your key is held only in this page's memory; it is not saved. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Get an API key</a>.</p>
+        <p>Gemini reads printed and handwritten text using the server's configured key automatically. Pages are sent to Google and may use paid API quota.</p>
       </div>
       <div class="backend-mode"><label for="handwriting" id="handwriting-setting"><input type="checkbox" id="handwriting">Read handwritten invoice values</label><span id="backend-status" role="status">Optional · needs the local Python server</span></div>
-      <div class="gemini-settings" id="server-auth" hidden><div class="settings"><label for="server-token">Server access token</label><input id="server-token" type="password" autocomplete="off" spellcheck="false" placeholder="Enter the token provided by the server owner" style="width:100%;min-height:44px;padding:9px 10px;border:1px solid #d7e2db;border-radius:8px"></div><p>This server requires an access token. It is held only in this page's memory.</p></div>
+      <p id="deployment-info" class="message" hidden><span id="deployment-state"></span> · <a id="deployment-link" target="_blank" rel="noopener noreferrer">View deployment status</a></p>
       <div class="progress-wrap" id="progress-wrap" hidden><div class="progress-label"><span id="progress-label">Preparing…</span><span class="progress-status"><span id="progress-percent">0%</span><button type="button" class="secondary" id="cancel">Cancel</button></span></div><progress id="progress" max="100" value="0" aria-label="Extraction progress"></progress></div>
       <p class="message" id="message" role="status" aria-live="polite" hidden></p>
       <details class="quality" id="quality" hidden><summary id="quality-title">Review extraction</summary><p id="quality-summary"></p><ul id="quality-words" hidden></ul><p>OCR confidence is an engine estimate, not an accuracy guarantee. Check names, numbers, tables, and handwriting against the original.</p></details>
@@ -455,7 +455,7 @@
 
     function setBusy(value) {
       busy = value;
-      for (const id of ['dropzone', 'file-input', 'change-file', 'remove', 'language', 'handwriting', 'ocr-provider', 'ocr-quality', 'gemini-key', 'gemini-model', 'server-token']) $(id).disabled = value;
+      for (const id of ['dropzone', 'file-input', 'change-file', 'remove', 'language', 'handwriting', 'ocr-provider', 'ocr-quality', 'gemini-key', 'gemini-model']) $(id).disabled = value;
       $('output').setAttribute('aria-busy', String(value));
       $('output').readOnly = value || !$('output').value.trim();
       $('copy').disabled = value || !$('output').value.trim();
@@ -606,7 +606,10 @@
           if (!response.ok) continue;
           const health = await response.json();
           if (health.service !== 'textlens-handwriting') continue;
-          $('server-auth').hidden = !health.requires_access_token;
+          $('gemini-key-setting').hidden = Boolean(health.gemini?.configured);
+          $('deployment-info').hidden = false;
+          $('deployment-state').textContent = configured ? 'Deployment active · VPS connected' : 'Server connected';
+          $('deployment-link').href = `${base}/api/health`;
           if ($('ocr-provider').value === 'gemini') {
             if (!health.gemini?.available) throw new Error('Update and restart the Python server to enable Gemini OCR.');
           } else if (!health.available) throw new Error('Install the Python OCR requirements to use handwriting mode. See README.md.');
@@ -627,7 +630,7 @@
         $('backend-status').textContent = 'Checking the Python server for Gemini…';
         try {
           const health = await discoverBackend();
-          if (version === backendCheckVersion) $('backend-status').textContent = health.gemini.configured ? 'Gemini ready · server API key configured' : 'Server connected · enter your Gemini API key';
+          if (version === backendCheckVersion) $('backend-status').textContent = health.gemini.configured ? 'Server connected · Gemini configured' : 'Server connected · enter your Gemini API key';
         } catch (error) { if (version === backendCheckVersion) $('backend-status').textContent = error.message; }
         return;
       }
@@ -650,7 +653,6 @@
       }
       const prepared = prepareUpload(source);
       try {
-        if (!$('server-auth').hidden && !$('server-token').value.trim()) throw new Error('Enter the server access token before extraction.');
         let blob = await guarded(new Promise(resolve => prepared.canvas.toBlob(resolve, gemini ? 'image/jpeg' : 'image/png', .95)), 'Preparing the OCR image');
         if (!blob) throw new Error('Could not prepare this page for OCR.');
         if (blob.size > 15 * 1024 * 1024) blob = await guarded(new Promise(resolve => prepared.canvas.toBlob(resolve, 'image/jpeg', .95)), 'Preparing the handwriting image');
@@ -662,14 +664,16 @@
         progress(((ocrPage - 1) / totalPages) * 100, `Reading printed labels and handwritten values on page ${ocrPage} of ${totalPages}…`);
         $('backend-status').textContent = gemini ? 'Gemini is reading this page, including handwriting…' : 'Reading locally · first use may download OCR models';
         let response;
-        const headers = $('server-token').value.trim() ? { Authorization: `Bearer ${$('server-token').value.trim()}` } : {};
-        try { response = await guarded(fetch(`${backendURL}/api/ocr`, { method: 'POST', headers, body: form, signal: extractionController.signal }), gemini ? 'Gemini recognition' : 'Local handwriting recognition', 300000); }
+        try { response = await guarded(fetch(`${backendURL}/api/ocr`, { method: 'POST', body: form, signal: extractionController.signal }), gemini ? 'Gemini recognition' : 'Local handwriting recognition', 300000); }
         catch (error) {
           if (error.name === 'AbortError' || /timed out/.test(error.message)) throw error;
           throw new Error('Cannot reach the OCR server. Check its connection and configuration, then retry.');
         }
         const data = await guarded(response.json(), 'Reading the handwriting result');
-        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The OCR server could not read this page.');
+        if (!response.ok) {
+          $('backend-status').textContent = gemini && /Gemini quota/i.test(data.detail || '') ? 'Server connected · Gemini quota exceeded' : 'Server connected · extraction needs retry';
+          throw new Error(typeof data.detail === 'string' ? data.detail : 'The OCR server could not read this page.');
+        }
         if (typeof data.text !== 'string' || !(Number.isFinite(data.confidence) || (gemini && data.confidence === null)) || !Array.isArray(data.uncertain) || !Array.isArray(data.words)) throw new Error('The OCR server returned an invalid result.');
         $('backend-status').textContent = gemini ? 'Gemini extraction complete' : 'Local handwriting model ready';
         const notes = Array.isArray(data.notes) ? data.notes.slice() : [];
@@ -964,7 +968,7 @@
       $('gemini-settings').hidden = !gemini;
       $('speed-setting').hidden = gemini;
       $('handwriting-setting').hidden = gemini;
-      $('server-auth').hidden = true;
+      $('deployment-info').hidden = true;
       $('handwriting').disabled = gemini;
       document.querySelector('.privacy span').textContent = gemini ? 'Gemini sends pages to Google' : 'Your files stay on this computer';
       backendURL = null;

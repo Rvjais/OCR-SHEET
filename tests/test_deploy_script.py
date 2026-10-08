@@ -71,7 +71,7 @@ exit 1
 if [[ ${MOCK_FAILURE:-} == https ]]; then exit 22; fi
 revision=${TEXTLENS_IMAGE##*:}
 if [[ ${MOCK_FAILURE:-} == wrong_revision ]]; then revision=wrong; fi
-printf '{"service":"textlens-handwriting","version":"%s","gemini":{"configured":true},"requires_access_token":true}\\n' "$revision"
+printf '{"status":"ok","service":"textlens-handwriting","version":"%s","gemini":{"configured":true},"requires_access_token":false}\\n' "$revision"
 ''')
 
     def fake(self, name, body):

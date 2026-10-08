@@ -83,8 +83,7 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     assert.match(await gemini.locator('#message').textContent(), /quota/);
     assert.equal(await gemini.locator('#output').inputValue(), '');
 
-    // A deployed frontend must use its configured HTTPS server and send the
-    // access token in a header without storing it or placing it in the URL.
+    // The deployed frontend uses its configured server without credential entry.
     const remote = await browser.newPage();
     remote.on('pageerror', error => crashes.push(error.message));
     await remote.route('**/runtime-config.js', route => route.fulfill({
@@ -94,25 +93,24 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     const cors = { 'access-control-allow-origin': new URL(url).origin,
       'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Authorization, Content-Type' };
     await remote.route('https://72-61-224-90.sslip.io/api/health', route => route.fulfill({ headers: cors,
-      json: { service: 'textlens-handwriting', available: false, requires_access_token: true,
+      json: { status: 'ok', service: 'textlens-handwriting', available: false, requires_access_token: false,
         gemini: { available: true, configured: true } } }));
     let protectedRequests = 0;
     await remote.route('https://72-61-224-90.sslip.io/api/ocr', async route => {
       if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
       protectedRequests++;
-      assert.equal(route.request().headers().authorization, 'Bearer private-test-token');
-      assert.doesNotMatch(route.request().url(), /private-test-token/);
+      assert.equal(route.request().headers().authorization, undefined);
+      assert.doesNotMatch(route.request().postData(), /name="api_key"\r\n\r\n[^\r]/);
       await route.fulfill({ headers: cors, json: { text: 'AB-00123 1,234.50', confidence: null,
         uncertain: [], words: [], notes: [], engine: 'Gemini' } });
     });
     await remote.goto(url);
-    await remote.locator('#server-token').waitFor({ state: 'visible' });
+    await remote.locator('#deployment-info').waitFor({ state: 'visible' });
+    assert.equal(await remote.locator('#server-token').count(), 0);
+    assert.equal(await remote.locator('#gemini-key-setting').isVisible(), false);
+    assert.match(await remote.locator('#deployment-state').textContent(), /Deployment active/);
+    assert.equal(await remote.locator('#deployment-link').getAttribute('href'), 'https://72-61-224-90.sslip.io/api/health');
     await remote.locator('#file-input').setInputFiles(path.join(fixtures, 'numbers.png'));
-    await remote.locator('#extract').click();
-    await remote.waitForFunction(() => !document.getElementById('extract').disabled);
-    assert.match(await remote.locator('#message').textContent(), /Enter the server access token/);
-    assert.equal(protectedRequests, 0);
-    await remote.locator('#server-token').fill('private-test-token');
     await remote.locator('#extract').click();
     await remote.waitForFunction(() => !document.getElementById('extract').disabled);
     assert.equal(protectedRequests, 1);
@@ -120,6 +118,6 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     assert.equal(await remote.evaluate(() => localStorage.length + sessionStorage.length), 0);
     await remote.close();
     assert.deepEqual(crashes, []);
-    console.log('Passed: fast pass count, warm worker reuse, Gemini extraction, configured HTTPS backend, token authentication, privacy, review, API failure and mobile layout.');
+    console.log('Passed: fast pass count, warm worker reuse, Gemini extraction, automatic hosted extraction, deployment status, privacy, review, API failure and mobile layout.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

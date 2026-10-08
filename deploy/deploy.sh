@@ -74,7 +74,7 @@ if ! curl --fail --silent --show-error --retry 8 --retry-all-errors \
   exit 1
 fi
 if ! compose exec -T api python -c \
-  'import json,sys; d=json.load(sys.stdin); assert d["service"]=="textlens-handwriting"; assert d["version"]==sys.argv[1]; assert d["gemini"]["configured"]; assert d["requires_access_token"]' \
+  'import json,sys; d=json.load(sys.stdin); assert d["status"]=="ok"; assert d["service"]=="textlens-handwriting"; assert d["version"]==sys.argv[1]; assert d["gemini"]["configured"]; assert not d["requires_access_token"]' \
   "${image_ref##*:}" < "$release/.health.json"; then
   rollback
   exit 1

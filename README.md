@@ -1,6 +1,6 @@
 # TextLens
 
-For the AlmaLinux Hostinger VPS and Vercel deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md). Docker, HTTPS through the existing OpenLiteSpeed proxy and free `72-61-224-90.sslip.io` hostname, certificate renewal, and the GitHub Actions build/deploy pipeline are configured in this repository. The frontend reads its public API address from `runtime-config.js`; secrets stay on the VPS. The container enables Gemini OCR and requires a server access token.
+For the AlmaLinux Hostinger VPS and Vercel deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md). Docker, HTTPS through the existing OpenLiteSpeed proxy and free `72-61-224-90.sslip.io` hostname, certificate renewal, and the GitHub Actions build/deploy pipeline are configured in this repository. The frontend reads its public API address from `runtime-config.js`; the Gemini key stays on the VPS and is used automatically. Hosted extraction needs no user-entered token or key and has configurable public request limits. The app shows its server connection and links to deployment status.
 
 An image and PDF text extraction prototype with browser OCR and an optional local Python handwriting backend. To use browser OCR alone, start a simple local server in this folder:
 

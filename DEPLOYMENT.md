@@ -46,12 +46,16 @@ BACKEND_DOMAIN=72-61-224-90.sslip.io
 FRONTEND_ORIGINS=https://ocr-sheet-topaz.vercel.app
 GEMINI_MODEL=gemini-3.1-pro-preview
 GEMINI_API_KEY=YOUR_GEMINI_KEY
-API_ACCESS_TOKEN=YOUR_RANDOM_ACCESS_TOKEN
+PUBLIC_OCR_PER_MINUTE=12
+PUBLIC_OCR_PER_DAY=500
+PUBLIC_OCR_CONCURRENT=2
 ```
 
-Generate the access token using `openssl rand -hex 32`. Keep the file owned by `textlens-deploy` with mode 600. Do not commit credentials or put them in the frontend. A Git-ignored local `.env.production` can hold your private backup.
+Keep the file owned by `textlens-deploy` with mode 600. Do not commit credentials or put them in the frontend. A Git-ignored local `.env.production` can hold your private backup.
 
-The app prompts for this **server access token** after connecting to the hosted backend. Enter it and leave the Gemini key field blank. Tokens are held only in browser memory and sent in an Authorization header. This shared token is for a private app, not individual user accounts or public per-user billing.
+The deployed app uses the server's Gemini key automatically. Users only upload and extract; no server token or API key entry is required. **Deployment active · VPS connected** appears in the app with a **View deployment status** link to `https://72-61-224-90.sslip.io/api/health`. The health JSON returns `status: ok` and the deployed commit in `version`.
+
+The public endpoint defaults to 12 OCR requests per minute, 500 requests per rolling 24 hours, and two concurrent requests, across the server. These limits apply before images are decoded or sent to Gemini; excess requests receive 429 with a Retry-After header. Adjust the environment values above to match expected usage. Counters are held in this single container's memory and reset on restart/deployment. They are usage bounds, not individual user authentication.
 
 ## HTTPS on the existing OpenLiteSpeed server
 
@@ -122,7 +126,7 @@ Push to `main`, or use Actions → **Test and deploy OCR backend** → Run workf
 
 The workflow tests the code, checks scripts, builds a non-root image, smoke-tests its production filesystem restrictions and authentication, and publishes it. Over verified SSH it transfers only Compose and deploy scripts, pulls the image, and starts the container. Gemini credentials remain in `/opt/textlens/.env`.
 
-Success requires a healthy container and an HTTPS health response containing the expected commit, a configured Gemini key, and required authentication. No paid Gemini request is made during deployment. Failed pulls preserve the current release; failures after replacement restore the previous image. The shared `.env` and one-time proxy configuration are not rolled back. Container replacement can cause a brief interruption.
+Success requires a healthy container and an HTTPS health response containing `status: ok`, the expected commit, a configured Gemini key, and `requires_access_token: false`. No paid Gemini request is made during deployment. Failed pulls preserve the current release; failures after replacement restore the previous image. The shared `.env` and one-time proxy configuration are not rolled back. Container replacement can cause a brief interruption.
 
 The frontend's API address is in `runtime-config.js`. Vercel must deploy it with `index.html` and `extraction-utils.js`. Local development keeps local discovery.
 
@@ -152,7 +156,7 @@ If the image is no longer cached, rerun its workflow or temporarily log in with 
 | GHCR pull denied | Image repository association and workflow package permission |
 | HTTPS fails | DNS, OpenLiteSpeed mappings, certificate/renewal, firewall |
 | CORS error | Exact `FRONTEND_ORIGINS` and latest Vercel version |
-| OCR 401 | Server access token, separate from the Gemini key |
+| Server limit 429 | Wait according to Retry-After, or adjust the VPS public usage limits |
 | Gemini 429 | Google project quota/billing |
 
 Previous live tests hit Gemini's free-tier quota limit. Health and deployment can succeed while OCR remains unavailable until Google's quota permits requests.
