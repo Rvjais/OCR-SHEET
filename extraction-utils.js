@@ -116,13 +116,25 @@
     const missing = [];
     const replaced = new Set();
     for (const nativeLine of cleanText(nativeText).split('\n').filter(line => line.trim())) {
+      // Printed labels can share a line with handwritten values. Never replace
+      // that whole OCR line with the shorter selectable label.
+      let contained = false;
+      const needle = normalized(nativeLine);
+      for (let i = 0; i < lines.length; i++) {
+        if (normalized(lines[i]).includes(needle)) { contained = true; break; }
+      }
+      if (contained) continue;
       let bestIndex = -1, bestScore = 0;
       for (let i = 0; i < lines.length; i++) {
         if (replaced.has(i)) continue;
         const score = similarity(nativeLine, lines[i]);
         if (score > bestScore) { bestIndex = i; bestScore = score; }
       }
-      if (bestScore >= 0.78) { lines[bestIndex] = nativeLine; replaced.add(bestIndex); }
+      const matched = bestIndex >= 0 ? normalized(lines[bestIndex]) : '';
+      const sameNumbers = (matched.match(/\p{N}+/gu) || []).join('|') === (needle.match(/\p{N}+/gu) || []).join('|');
+      if (bestScore >= 0.78 && matched.length <= needle.length && matched.split(' ').length <= needle.split(' ').length && sameNumbers) {
+        lines[bestIndex] = nativeLine; replaced.add(bestIndex);
+      }
       else missing.push(nativeLine);
     }
     const text = cleanText(lines.join('\n'));

@@ -1,0 +1,12 @@
+**
+!Dockerfile
+!requirements-gemini.txt
+!backend/
+!backend/**
+!index.html
+!extraction-utils.js
+!runtime-config.js
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*

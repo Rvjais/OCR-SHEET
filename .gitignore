@@ -1,2 +1,8 @@
 node_modules/
 tests/fixtures/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example

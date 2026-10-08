@@ -1,0 +1,27 @@
+name: textlens
+services:
+  api:
+    image: ${TEXTLENS_IMAGE:?Set TEXTLENS_IMAGE to the published image}
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in the VPS .env}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-pro-preview}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-https://ocr-sheet-topaz.vercel.app}
+      ALLOWED_HOSTS: ${BACKEND_DOMAIN:-72-61-224-90.sslip.io},localhost,127.0.0.1
+      API_ACCESS_TOKEN: ${API_ACCESS_TOKEN:?Set a random API_ACCESS_TOKEN in the VPS .env}
+      BACKEND_DOMAIN: ${BACKEND_DOMAIN:-72-61-224-90.sslip.io}
+    ports:
+      - "127.0.0.1:8010:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 150s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -85,3 +85,19 @@ test('batch export marks failed, empty and unprocessed pages explicitly', () => 
 test('batch export honors a page intentionally edited to blank', () => {
   assert.equal(U.formatBatch([{ file: { name: 'cleared.pdf' }, pageCount: 1, reports: [{ page: 1, text: '', edited: true }] }]), '=== File 1: cleared.pdf ===\n— Page 1 —\n');
 });
+
+test('printed invoice labels never replace handwritten values on the same line', () => {
+  const result = U.mergeHybrid('Invoice number\nTotal\nCustomer name', 'Invoice number AB-00123\nTotal 1,234.50\nCustomer name Akhil Taneja');
+  assert.equal(result.text, 'Invoice number AB-00123\nTotal 1,234.50\nCustomer name Akhil Taneja');
+  assert.equal(result.missing, 0);
+});
+
+test('fuzzy label matches keep a handwritten numeric suffix', () => {
+  const result = U.mergeHybrid('Invoice number', 'lnvoice number 00123');
+  assert.match(result.text, /00123/);
+});
+
+test('long printed keys cannot erase a short pen-written value after a fuzzy match', () => {
+  const result = U.mergeHybrid('Total invoice amount inclusive of tax:', 'TotaI invoice amount inclusive of tax: 5');
+  assert.match(result.text, /tax: 5/);
+});

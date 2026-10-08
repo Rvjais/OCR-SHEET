@@ -1,0 +1,6 @@
+[Unit]
+Description=Renew the TextLens HTTPS certificate
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --cert-name 72-61-224-90.sslip.io --quiet --deploy-hook "/usr/local/lsws/bin/lswsctrl reload"

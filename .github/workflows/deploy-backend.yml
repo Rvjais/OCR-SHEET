@@ -1,0 +1,135 @@
+name: Test and deploy OCR backend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: pip install -r requirements-gemini.txt numpy==2.3.5
+      - name: Test backend and extraction rules
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          npm test
+      - name: Check deployment scripts
+        run: |
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+          bash -n deploy/deploy.sh
+          bash -n deploy/bootstrap-almalinux.sh
+          shellcheck deploy/*.sh
+
+  build:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Choose image name
+        id: image
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}-backend:$GITHUB_SHA"
+          echo "ref=$image" >> "$GITHUB_OUTPUT"
+      - name: Build container
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          docker build --pull --build-arg "APP_VERSION=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$IMAGE_REF" .
+      - name: Smoke test container and validate Compose configuration
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          docker run -d --name textlens-smoke -p 127.0.0.1:18000:8000 --read-only \
+            --tmpfs /tmp:size=128m --cap-drop ALL --security-opt no-new-privileges:true \
+            -e API_ACCESS_TOKEN=smoke-test-token -e GEMINI_API_KEY=smoke-test-key "$IMAGE_REF"
+          trap 'docker rm -f textlens-smoke >/dev/null' EXIT
+          for attempt in {1..30}; do
+            echo "Health check attempt $attempt"
+            if curl -fsS http://127.0.0.1:18000/api/health > /tmp/health.json; then break; fi
+            sleep 2
+          done
+          python -c 'import json,os; d=json.load(open("/tmp/health.json")); assert d["version"]==os.environ["GITHUB_SHA"]; assert d["requires_access_token"]'
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -F 'file=@Dockerfile;type=image/png' http://127.0.0.1:18000/api/ocr)
+          test "$status" = 401
+          GEMINI_API_KEY=test API_ACCESS_TOKEN=test TEXTLENS_IMAGE="$IMAGE_REF" \
+            docker compose -f deploy/compose.yml config --quiet
+      - name: Publish image to GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE_REF"
+
+  deploy:
+    needs: build
+    if: vars.ENABLE_VPS_DEPLOY == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Prepare verified SSH connection
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY" || { echo 'Set VPS_SSH_KEY in GitHub secrets.' >&2; exit 1; }
+          test -n "$SSH_KNOWN_HOSTS" || { echo 'Set VPS_KNOWN_HOSTS in GitHub secrets.' >&2; exit 1; }
+          install -d -m 700 "$RUNNER_TEMP/textlens-ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/textlens-ssh/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/textlens-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/textlens-ssh/key" "$RUNNER_TEMP/textlens-ssh/known_hosts"
+      - name: Deploy and verify HTTPS health
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST || '72.61.224.90' }}
+          VPS_USER: ${{ vars.VPS_USER || 'textlens-deploy' }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+          IMAGE_REF: ${{ needs.build.outputs.image }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          [[ "$VPS_HOST" =~ ^[a-zA-Z0-9.-]+$ && "$VPS_USER" =~ ^[a-zA-Z0-9_-]+$ && "$VPS_PORT" =~ ^[0-9]+$ ]]
+          options=(-i "$RUNNER_TEMP/textlens-ssh/key" -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            -o "UserKnownHostsFile=$RUNNER_TEMP/textlens-ssh/known_hosts")
+          destination="$VPS_USER@$VPS_HOST"
+          release="/opt/textlens/releases/$GITHUB_SHA"
+          ssh "${options[@]}" -p "$VPS_PORT" "$destination" "mkdir -p '$release'"
+          scp "${options[@]}" -P "$VPS_PORT" deploy/compose.yml deploy/deploy.sh "$destination:$release/"
+          printf '%s' "$REGISTRY_TOKEN" | ssh "${options[@]}" -p "$VPS_PORT" "$destination" "bash '$release/deploy.sh' '$IMAGE_REF' '$GITHUB_ACTOR'"
+      - name: Remove temporary SSH files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/textlens-ssh/key" "$RUNNER_TEMP/textlens-ssh/known_hosts"

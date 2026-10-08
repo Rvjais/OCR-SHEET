@@ -13,6 +13,7 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     const crashes = [];
     page.on('pageerror', error => crashes.push(error.message));
     await page.goto(url);
+    await page.locator('#ocr-provider').selectOption('browser');
     assert.equal(await page.locator('#file-input').getAttribute('multiple'), '');
     await page.locator('#file-input').setInputFiles(['numbers.png', 'broken.pdf', 'pages.pdf', 'other.png', 'exact.pdf'].map(name => path.join(fixtures, name)));
     assert.equal(await page.locator('.document-select').count(), 5);
@@ -109,6 +110,7 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     // Cancel mid-batch: keep completed work, then resume only unfinished files.
     const cancel = await context.newPage();
     await cancel.goto(url);
+    await cancel.locator('#ocr-provider').selectOption('browser');
     await cancel.evaluate(() => {
       window.Tesseract = { PSM: { AUTO: '3' }, createWorker: async () => ({
         setParameters: async () => {}, terminate: async () => {},

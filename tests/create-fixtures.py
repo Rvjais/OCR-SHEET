@@ -68,6 +68,13 @@ for label, code in [('FIRST', 'PAGE-00111'), ('SECOND', 'PAGE-00222')]:
     c.showPage()
 c.save()
 
+c = canvas.Canvas(str(target / 'invoice-labels.pdf'))
+c.setFont('Helvetica', 18)
+c.drawString(40, 750, 'Invoice number:')
+c.drawString(40, 700, 'Total:')
+c.drawString(40, 650, 'Date:')
+c.save()
+
 other = Image.new('RGB', (1200, 400), 'white')
 ImageDraw.Draw(other).text((50, 100), 'Second photo PHOTO-007', fill='black', font=ImageFont.truetype(font_path, 50))
 other.save(target / 'other.png')
