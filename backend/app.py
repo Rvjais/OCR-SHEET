@@ -99,7 +99,7 @@ def create_app(service=None, gemini_service=None):
             return
         scheme, _, token = request.headers.get('authorization', '').partition(' ')
         if scheme.lower() != 'bearer' or not secrets.compare_digest(token.encode(), access_token.encode()):
-            raise HTTPException(401, 'Enter the server access token to use this OCR server.', headers={'WWW-Authenticate': 'Bearer'})
+            raise HTTPException(401, 'You do not have access to text recognition.', headers={'WWW-Authenticate': 'Bearer'})
 
     @app.get('/')
     @app.get('/index.html')
@@ -121,7 +121,7 @@ def create_app(service=None, gemini_service=None):
 
     @app.post('/api/ocr', dependencies=[Depends(authorize_ocr)])
     async def recognize(file: UploadFile = File(...), language: str = Form('eng'),
-                        provider: str = Form('local'), api_key: str = Form(''), model: str = Form('')):
+                        provider: str = Form('local'), api_key: str = Form('')):
         try:
             if provider not in {'local', 'gemini'}:
                 raise HTTPException(400, 'Unsupported OCR provider.')
@@ -137,8 +137,9 @@ def create_app(service=None, gemini_service=None):
             try:
                 if provider == 'gemini':
                     try:
-                        return await run_in_threadpool(gemini_service.recognize, image, language, api_key, model)
+                        return await run_in_threadpool(gemini_service.recognize, image, language, api_key)
                     except GeminiError as error:
+                        logger.warning('Gemini OCR failed with status %s', error.status)
                         raise HTTPException(error.status, str(error)) from None
                 return await run_in_threadpool(service.recognize, image, language)
             except HTTPException:
@@ -146,9 +147,9 @@ def create_app(service=None, gemini_service=None):
             except Exception:
                 if provider == 'gemini':
                     logger.error('Gemini recognition failed unexpectedly')
-                    raise HTTPException(502, 'Gemini could not read this page. Retry or check your server installation.') from None
+                    raise HTTPException(502, 'Text recognition is temporarily unavailable. Please try again later.') from None
                 logger.exception('Local handwriting recognition failed')
-                raise HTTPException(503, 'The handwriting model could not run. Check the server terminal, installed requirements, and model download connection, then retry.') from None
+                raise HTTPException(503, 'Handwriting recognition is temporarily unavailable. Choose printed text or try again later.') from None
             finally:
                 image.close()
         finally:

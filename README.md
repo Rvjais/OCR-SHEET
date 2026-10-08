@@ -1,6 +1,6 @@
 # TextLens
 
-For the AlmaLinux Hostinger VPS and Vercel deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md). Docker, HTTPS through the existing OpenLiteSpeed proxy and free `72-61-224-90.sslip.io` hostname, certificate renewal, and the GitHub Actions build/deploy pipeline are configured in this repository. The frontend reads its public API address from `runtime-config.js`; the Gemini key stays on the VPS and is used automatically. Hosted extraction needs no user-entered token or key and has configurable public request limits. The app shows its server connection and links to deployment status.
+For the AlmaLinux Hostinger VPS and Vercel deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md). Docker, HTTPS through the existing OpenLiteSpeed proxy and free `72-61-224-90.sslip.io` hostname, certificate renewal, and the GitHub Actions build/deploy pipeline are configured in this repository. The frontend reads its public API address from `runtime-config.js`; the Gemini key stays on the VPS and is used automatically. Hosted extraction needs no user-entered token or key and has configurable public request limits. The product interface shows recognition modes without deployment details; operators can check `/api/health` directly.
 
 An image and PDF text extraction prototype with browser OCR and an optional local Python handwriting backend. To use browser OCR alone, start a simple local server in this folder:
 
@@ -18,7 +18,7 @@ The browser keeps one OCR worker loaded across files and extractions in the same
 
 ## Gemini OCR, including handwriting
 
-Start the Python server, choose **Gemini API + handwriting** under **OCR provider**, enter your API key (or leave it blank when the server has one), and click **Extract**. Get a key from [Google AI Studio](https://aistudio.google.com/apikey). You can change the model ID; the default is [Gemini 3.1 Pro Preview](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview), `gemini-3.1-pro-preview`. The integration uses Google's [image input](https://ai.google.dev/gemini-api/docs/image-understanding) and [structured output](https://ai.google.dev/gemini-api/docs/structured-output) APIs.
+Select **Printed + handwritten text**, upload files, and click **Extract**. The model is fixed to [Gemini 3.1 Pro Preview](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview), `gemini-3.1-pro-preview`, in `backend/gemini.py`; clients and environment settings cannot select another model. Configure `GEMINI_API_KEY` in `.env` for development or in the VPS configuration for hosting. The integration uses Google's [image input](https://ai.google.dev/gemini-api/docs/image-understanding) and [structured output](https://ai.google.dev/gemini-api/docs/structured-output) APIs.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -32,9 +32,9 @@ python -m pip install fastapi==0.142.2 uvicorn==0.54.0 python-multipart==0.0.32 
 python server.py
 ```
 
-You may also set `GEMINI_API_KEY` on the server and leave the browser key field blank. The server automatically reads `GEMINI_API_KEY` and `GEMINI_MODEL` from the project's local `.env` file; copy `.env.example` to `.env` to configure them. `.env` is excluded from Git, and existing environment variables take precedence. Set `GEMINI_MODEL` to change the server default and clear the browser model field to use it. Browser-entered keys are kept only in the open page's memory, never local/session storage or files. The server sends the key in Google's API-key header, never a URL. Health checks expose whether a server key is configured, never the key itself.
+The backend automatically reads `GEMINI_API_KEY` from the project's `.env` file; copy `.env.example` to `.env` to configure it. `.env` is excluded from Git, and existing environment variables take precedence. The frontend has no credential or model-entry fields. The backend sends the key in Google's API-key header, never a URL. Health checks expose whether a key is configured, never the key itself.
 
-Gemini mode sends each rendered page to Google, including selectable PDFs so handwritten additions are included. It may consume paid API quota. Gemini is initially selected; choose **On this computer** to use local OCR. Gemini failures, rate limits, blocked pages and incomplete outputs are shown as errors; the app does not silently switch providers. Cancel stops subsequent pages and aborts the browser request; an already submitted cloud request may finish and consume quota. The API does not provide OCR confidence scores, so Gemini results show review notes and ambiguous snippets without a numeric confidence. Review handwritten values against the preview.
+Gemini mode sends each rendered page to Google, including selectable PDFs so handwritten additions are included. It may consume paid API quota. Handwriting mode is initially selected; tick **Printed text** to use browser OCR. Only one recognition mode is selected at a time. Failures, limits and blocked/incomplete outputs show retry guidance; the app does not silently switch providers. Cancel stops subsequent pages and aborts the browser request; an already submitted cloud request may finish and consume quota. Gemini does not provide OCR confidence scores, so results show review notes and ambiguous snippets without a numeric confidence. Review handwritten values against the preview.
 
 ## Printed invoices with handwritten values
 
@@ -46,7 +46,7 @@ On this workspace, the virtual environment and English model downloads have alre
 .\.venv\Scripts\python.exe server.py
 ```
 
-Open http://127.0.0.1:8000 and enable **Read handwritten invoice values** before extraction. It supports the existing mixed image/PDF batches and page navigation. A selectable printed PDF text layer does not cause handwriting mode to skip the visible page. Printed keys and recognized pen-written values are kept together where their positions allow it; merging preserves recognized suffix values rather than replacing an entire OCR line with a shorter printed label.
+Local PaddleOCR is available through `/api/ocr` with `provider=local` for development/API integrations. The production interface uses Gemini for handwriting. Both support the existing mixed image/PDF batches and page navigation. A selectable PDF text layer does not cause handwriting mode to skip the visible page. Printed keys and recognized values are kept together where their positions allow it; merging preserves recognized suffix values rather than replacing an entire OCR line with a shorter printed label.
 
 For a fresh installation with Python 3.12:
 

@@ -14,7 +14,7 @@ class ConfigTests(unittest.TestCase):
             path.write_text('# Server only\nGEMINI_API_KEY=test-key\nGEMINI_MODEL="gemini-3.1-pro-preview"\nPATH=ignored\n', encoding='utf-8')
             load_server_config(path)
             self.assertEqual(os.environ['GEMINI_API_KEY'], 'test-key')
-            self.assertEqual(os.environ['GEMINI_MODEL'], 'gemini-3.1-pro-preview')
+            self.assertNotIn('GEMINI_MODEL', os.environ, 'model selection belongs to the codebase')
             self.assertNotIn('PATH', os.environ)
 
     def test_existing_environment_takes_precedence_and_missing_file_is_safe(self):

@@ -14,7 +14,7 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     const crashes = [];
     page.on('pageerror', error => crashes.push(error.message));
     await page.goto(url);
-    await page.locator('#ocr-provider').selectOption('browser');
+    await page.locator('#printed-ocr').check();
 
     async function extract(name) {
       if (await page.locator('#file-row').isVisible()) await page.locator('#remove').click();
@@ -58,7 +58,7 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     const cancelPage = await context.newPage();
     await cancelPage.route('**/tesseract.min.js', async route => { await new Promise(resolve => setTimeout(resolve, 2500)); await route.continue().catch(() => {}); });
     await cancelPage.goto(url);
-    await cancelPage.locator('#ocr-provider').selectOption('browser');
+    await cancelPage.locator('#printed-ocr').check();
     await cancelPage.locator('#file-input').setInputFiles(path.join(fixtures, 'numbers.png'));
     await cancelPage.locator('#extract').click();
     await cancelPage.locator('#cancel').click();
@@ -72,7 +72,7 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     const offline = await context.newPage();
     await offline.route('**/tesseract.min.js', route => route.abort());
     await offline.goto(url);
-    await offline.locator('#ocr-provider').selectOption('browser');
+    await offline.locator('#printed-ocr').check();
     await offline.locator('#file-input').setInputFiles(path.join(fixtures, 'numbers.png'));
     await offline.locator('#extract').click();
     await offline.waitForFunction(() => !document.getElementById('extract').disabled);
@@ -86,7 +86,7 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     // Deterministic engine fault injection checks review cues and partial results.
     const review = await context.newPage();
     await review.goto(url);
-    await review.locator('#ocr-provider').selectOption('browser');
+    await review.locator('#printed-ocr').check();
     await review.evaluate(() => {
       window.Tesseract = {
         PSM: { AUTO: '3' },
@@ -112,7 +112,7 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
 
     const partial = await context.newPage();
     await partial.goto(url);
-    await partial.locator('#ocr-provider').selectOption('browser');
+    await partial.locator('#printed-ocr').check();
     await partial.evaluate(() => {
       window.Tesseract = {
         PSM: { AUTO: '3' },

@@ -73,7 +73,7 @@ class BackendTests(unittest.TestCase):
             with self.assertLogs('backend.app', level='ERROR'):
                 response = self.client.post('/api/ocr', files={'file': ('page.png', image_bytes(), 'image/png')})
         self.assertEqual(response.status_code, 503)
-        self.assertIn('server terminal', response.json()['detail'])
+        self.assertIn('temporarily unavailable', response.json()['detail'])
         self.assertNotIn('text', response.json())
 
     def test_local_live_server_cors(self):

@@ -3,7 +3,6 @@ import base64
 from io import BytesIO
 import json
 import os
-import re
 
 import httpx
 
@@ -30,17 +29,15 @@ class GeminiService:
 
     def health(self):
         return {'available': True, 'configured': bool(os.environ.get('GEMINI_API_KEY', '').strip()),
-                'default_model': os.environ.get('GEMINI_MODEL', DEFAULT_MODEL)}
+                'default_model': DEFAULT_MODEL}
 
-    def recognize(self, image, language, api_key='', model=''):
+    def recognize(self, image, language, api_key=''):
         key = api_key.strip() or os.environ.get('GEMINI_API_KEY', '').strip()
-        model = model.strip() or os.environ.get('GEMINI_MODEL', DEFAULT_MODEL)
+        model = DEFAULT_MODEL
         if not key:
-            raise GeminiError(400, 'Enter a Gemini API key or set GEMINI_API_KEY on the server.')
+            raise GeminiError(503, 'Handwriting recognition is temporarily unavailable. Choose printed text or try again later.')
         if len(key) > 256 or any(ord(char) < 33 or ord(char) > 126 for char in key):
-            raise GeminiError(400, 'The Gemini API key has an invalid format.')
-        if not re.fullmatch(r'gemini-[A-Za-z0-9.-]{1,80}', model):
-            raise GeminiError(400, 'Use a Gemini model ID such as gemini-3.1-pro-preview.')
+            raise GeminiError(503, 'Handwriting recognition is temporarily unavailable. Choose printed text or try again later.')
         if language not in LANGUAGES:
             raise GeminiError(400, 'Unsupported text language.')
         with image.copy() as page, BytesIO() as output:
@@ -76,16 +73,16 @@ class GeminiService:
                 headers={'x-goog-api-key': key}, json=payload,
             )
         except httpx.TimeoutException:
-            raise GeminiError(504, 'Gemini timed out. Retry or use a smaller page.') from None
+            raise GeminiError(504, 'Handwriting recognition took too long. Try a smaller page or try again.') from None
         except httpx.HTTPError:
-            raise GeminiError(502, 'Cannot connect to Gemini. Check the server internet connection and retry.') from None
+            raise GeminiError(502, 'Text recognition is temporarily unavailable. Please try again later.') from None
         if response.status_code != 200:
             messages = {
-                400: 'Gemini rejected the request. Check the API key and selected model.',
-                401: 'Gemini API key is invalid. Check your key and retry.',
-                403: 'Gemini access was denied. Check the API key permissions and project.',
-                404: 'Gemini model is unavailable. Choose an image-capable model available to your project.',
-                429: 'Gemini quota or rate limit reached. Wait and retry, or check your API quota and billing.',
+                400: 'This page could not be processed. Try another image or choose printed text.',
+                401: 'Handwriting recognition is temporarily unavailable. Choose printed text or try again later.',
+                403: 'Handwriting recognition is temporarily unavailable. Choose printed text or try again later.',
+                404: 'Handwriting recognition is temporarily unavailable. Choose printed text or try again later.',
+                429: 'Handwriting recognition is busy. Please try again later or choose printed text.',
             }
             raise GeminiError(response.status_code if response.status_code in messages else 502,
                               messages.get(response.status_code, 'Gemini is temporarily unavailable. Retry later.'))

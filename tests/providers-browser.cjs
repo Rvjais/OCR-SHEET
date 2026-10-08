@@ -11,9 +11,14 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     const crashes = [];
     page.on('pageerror', error => crashes.push(error.message));
     await page.goto(url);
-    assert.equal(await page.locator('#ocr-provider').inputValue(), 'gemini');
-    assert.equal(await page.locator('#gemini-model').inputValue(), 'gemini-3.1-pro-preview');
-    await page.locator('#ocr-provider').selectOption('browser');
+    assert.equal(await page.locator('#gemini-ocr').isChecked(), true);
+    assert.equal(await page.locator('#printed-ocr').isChecked(), false);
+    assert.equal(await page.locator('#gemini-model, #gemini-key, #ocr-provider, #backend-status, #deployment-info').count(), 0);
+    await page.locator('#printed-ocr').check();
+    assert.equal(await page.locator('#gemini-ocr').isChecked(), false);
+    await page.locator('#printed-ocr').uncheck();
+    assert.equal(await page.locator('#gemini-ocr').isChecked(), true, 'one recognition mode remains selected');
+    await page.locator('#printed-ocr').check();
     await page.evaluate(() => {
       window.counts = { workers: 0, passes: 0, terminated: 0 };
       window.Tesseract = { PSM: { AUTO: '3' }, createWorker: async () => {
@@ -44,20 +49,19 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     const gemini = await browser.newPage();
     gemini.on('pageerror', error => crashes.push(error.message));
     await gemini.route('**/api/health', route => route.fulfill({ json: {
-      service: 'textlens-handwriting', available: false, gemini: { available: true, configured: false }
+      service: 'textlens-handwriting', available: false, gemini: { available: true, configured: true }
     } }));
     let requests = 0;
     await gemini.route('**/api/ocr', async route => {
       requests++;
       const body = route.request().postData();
       assert.match(body, /name="provider"\r\n\r\ngemini/);
-      assert.match(body, /name="api_key"\r\n\r\ntest-key/);
+      assert.doesNotMatch(body, /name="(?:api_key|model)"/, 'credentials and model selection are not submitted by users');
       await route.fulfill({ json: { text: 'Invoice number: AB-00123\nTotal: 1,234.50', confidence: null,
         uncertain: [{ text: '1,234.50', confidence: null }], words: [], notes: ['Review handwriting.'], engine: 'Gemini' } });
     });
     await gemini.goto(url);
-    await gemini.locator('#ocr-provider').selectOption('gemini');
-    await gemini.locator('#gemini-key').fill('test-key');
+    await gemini.locator('#gemini-ocr').check();
     await gemini.locator('#file-input').setInputFiles(['invoice-labels.pdf', 'numbers.png'].map(name => path.join(fixtures, name)));
     await gemini.locator('#extract').click();
     await gemini.waitForFunction(() => !document.getElementById('extract').disabled);
@@ -105,11 +109,9 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
         uncertain: [], words: [], notes: [], engine: 'Gemini' } });
     });
     await remote.goto(url);
-    await remote.locator('#deployment-info').waitFor({ state: 'visible' });
     assert.equal(await remote.locator('#server-token').count(), 0);
-    assert.equal(await remote.locator('#gemini-key-setting').isVisible(), false);
-    assert.match(await remote.locator('#deployment-state').textContent(), /Deployment active/);
-    assert.equal(await remote.locator('#deployment-link').getAttribute('href'), 'https://72-61-224-90.sslip.io/api/health');
+    assert.equal(await remote.locator('#gemini-key, #gemini-model, #deployment-info, #backend-status').count(), 0);
+    assert.doesNotMatch(await remote.locator('body').innerText(), /\b(?:VPS|server|deployment)\b/i);
     await remote.locator('#file-input').setInputFiles(path.join(fixtures, 'numbers.png'));
     await remote.locator('#extract').click();
     await remote.waitForFunction(() => !document.getElementById('extract').disabled);
@@ -118,6 +120,6 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     assert.equal(await remote.evaluate(() => localStorage.length + sessionStorage.length), 0);
     await remote.close();
     assert.deepEqual(crashes, []);
-    console.log('Passed: fast pass count, warm worker reuse, Gemini extraction, automatic hosted extraction, deployment status, privacy, review, API failure and mobile layout.');
+    console.log('Passed: exclusive recognition tick boxes, fixed-model requests, fast OCR, automatic extraction, clean production interface, privacy, review, API failure and mobile layout.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

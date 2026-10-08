@@ -9,7 +9,7 @@
 | Container base | `python:3.12-slim-bookworm`, Debian with Python 3.12 |
 | Image registry | `ghcr.io/rvjais/ocr-sheet-backend:<commit-sha>` |
 | Reverse proxy | Existing OpenLiteSpeed, forwarding to `127.0.0.1:8010` |
-| Model | `gemini-3.1-pro-preview` |
+| Fixed model | `gemini-3.1-pro-preview`, defined in `backend/gemini.py` |
 
 The host remains AlmaLinux. The container runs Gemini's web dependencies without installing PaddleOCR models. Browser printed-text OCR continues working; Python/Paddle handwriting is not included in this image.
 
@@ -44,7 +44,6 @@ Edit `/opt/textlens/.env`:
 ```dotenv
 BACKEND_DOMAIN=72-61-224-90.sslip.io
 FRONTEND_ORIGINS=https://ocr-sheet-topaz.vercel.app
-GEMINI_MODEL=gemini-3.1-pro-preview
 GEMINI_API_KEY=YOUR_GEMINI_KEY
 PUBLIC_OCR_PER_MINUTE=12
 PUBLIC_OCR_PER_DAY=500
@@ -53,7 +52,7 @@ PUBLIC_OCR_CONCURRENT=2
 
 Keep the file owned by `textlens-deploy` with mode 600. Do not commit credentials or put them in the frontend. A Git-ignored local `.env.production` can hold your private backup.
 
-The deployed app uses the server's Gemini key automatically. Users only upload and extract; no server token or API key entry is required. **Deployment active · VPS connected** appears in the app with a **View deployment status** link to `https://72-61-224-90.sslip.io/api/health`. The health JSON returns `status: ok` and the deployed commit in `version`.
+The app offers tick boxes for **Printed text** and **Printed + handwritten text**, with one mode active at a time. Gemini uses the stored key automatically and the model fixed in `backend/gemini.py`. Users do not enter tokens, keys or model IDs. Development and deployment status are kept out of the product interface. Operators can check `https://72-61-224-90.sslip.io/api/health` for `status: ok` and the deployed commit in `version`.
 
 The public endpoint defaults to 12 OCR requests per minute, 500 requests per rolling 24 hours, and two concurrent requests, across the server. These limits apply before images are decoded or sent to Gemini; excess requests receive 429 with a Retry-After header. Adjust the environment values above to match expected usage. Counters are held in this single container's memory and reset on restart/deployment. They are usage bounds, not individual user authentication.
 

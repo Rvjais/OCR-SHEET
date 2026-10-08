@@ -5,7 +5,6 @@ services:
     restart: unless-stopped
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY in the VPS .env}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-pro-preview}
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-https://ocr-sheet-topaz.vercel.app}
       ALLOWED_HOSTS: ${BACKEND_DOMAIN:-72-61-224-90.sslip.io},localhost,127.0.0.1
       API_ACCESS_TOKEN: ""

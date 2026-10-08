@@ -23,11 +23,11 @@ class PublicOCRLimitsMiddleware:
             while queue and queue[0] <= now - window:
                 queue.popleft()
         if self.concurrent and self.active >= self.concurrent:
-            detail, retry = 'The OCR server is busy. Wait a moment and retry.', 10
+            detail, retry = 'Text recognition is busy. Wait a moment and retry.', 10
         elif self.per_minute and len(self.minute) >= self.per_minute:
-            detail, retry = 'The OCR server has reached its request limit. Wait a minute and retry.', 60
+            detail, retry = 'The request limit has been reached. Wait a minute and retry.', 60
         elif self.per_day and len(self.day) >= self.per_day:
-            detail, retry = 'The OCR server has reached its daily extraction limit. Try again later.', 3600
+            detail, retry = 'The daily extraction limit has been reached. Try again later.', 3600
         else:
             if self.per_minute:
                 self.minute.append(now)
