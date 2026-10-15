@@ -222,17 +222,10 @@
           <small style="color: #6d8073;">Arranged into clean columns & key-values with DeepSeek</small>
         </div>
         <div class="structured-actions">
-          <button type="button" class="secondary" id="deepseek-settings-btn" title="Set DeepSeek API Key">API Key</button>
           <button type="button" class="secondary" id="export-json-btn">Download JSON</button>
           <button type="button" class="primary" id="export-csv-btn"><svg aria-hidden="true" width="16" height="16"><use href="#i-download"/></svg>Download Excel / CSV</button>
           <button type="button" class="icon-button" id="close-table-btn" title="Close table view">×</button>
         </div>
-      </div>
-      <div class="api-key-bar" id="api-key-bar" hidden>
-        <label for="deepseek-key-input"><strong>DeepSeek API Key:</strong></label>
-        <input type="password" id="deepseek-key-input" placeholder="sk-..." autocomplete="off">
-        <button type="button" class="secondary" id="save-key-btn">Save Key</button>
-        <span id="key-saved-msg" style="color: #137d69; font-size: 12px;" hidden>Saved!</span>
       </div>
       <div class="meta-grid" id="structured-meta"></div>
       <h3 style="font-size: 14px; font-weight: 650; margin: 18px 0 10px; color: #1e3a2b;">Line Items Table</h3>
@@ -1156,28 +1149,6 @@
 
     let currentStructuredData = null;
 
-    const savedKey = localStorage.getItem('deepseek_api_key') || '';
-    if (savedKey) $('deepseek-key-input').value = savedKey;
-
-    $('deepseek-settings-btn').addEventListener('click', () => {
-      $('api-key-bar').hidden = !$('api-key-bar').hidden;
-      if (!$('api-key-bar').hidden) $('deepseek-key-input').focus();
-    });
-
-    $('save-key-btn').addEventListener('click', () => {
-      const key = $('deepseek-key-input').value.trim();
-      if (key) {
-        localStorage.setItem('deepseek_api_key', key);
-        $('key-saved-msg').hidden = false;
-        setTimeout(() => { $('key-saved-msg').hidden = true; $('api-key-bar').hidden = true; }, 1500);
-      } else {
-        localStorage.removeItem('deepseek_api_key');
-        $('key-saved-msg').textContent = 'Key removed';
-        $('key-saved-msg').hidden = false;
-        setTimeout(() => { $('key-saved-msg').hidden = true; $('key-saved-msg').textContent = 'Saved!'; }, 1500);
-      }
-    });
-
     $('close-table-btn').addEventListener('click', () => {
       $('structured-panel').hidden = true;
     });
@@ -1185,8 +1156,6 @@
     $('structure-table').addEventListener('click', async () => {
       const text = $('output').value.trim();
       if (!text) return;
-
-      const apiKey = localStorage.getItem('deepseek_api_key') || $('deepseek-key-input').value.trim();
 
       const btn = $('structure-table');
       const label = $('structure-table-label');
@@ -1203,16 +1172,11 @@
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, api_key: apiKey })
+          body: JSON.stringify({ text })
         });
 
         const data = await res.json();
         if (!res.ok) {
-          if (res.status === 400 && /api key/i.test(data.detail || '')) {
-            $('api-key-bar').hidden = false;
-            $('deepseek-key-input').focus();
-            throw new Error('Please enter your DeepSeek API key above and click "Save Key".');
-          }
           throw new Error(data.detail || 'DeepSeek structuring failed.');
         }
 

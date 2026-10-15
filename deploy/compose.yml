@@ -13,6 +13,7 @@ services:
       PUBLIC_OCR_PER_DAY: ${PUBLIC_OCR_PER_DAY:-500}
       PUBLIC_OCR_CONCURRENT: ${PUBLIC_OCR_CONCURRENT:-2}
       BACKEND_DOMAIN: ${BACKEND_DOMAIN:-72-61-224-90.sslip.io}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
     ports:
       - "127.0.0.1:8010:8000"
     read_only: true

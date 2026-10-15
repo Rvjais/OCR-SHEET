@@ -71,7 +71,7 @@ async def parse_invoice_with_deepseek(text: str, api_key: str = None) -> dict:
         load_server_config()
         key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
     if not key:
-        raise ValueError("DeepSeek API key is required. Set DEEPSEEK_API_KEY in .env or provide it.")
+        raise ValueError("DeepSeek API key is not configured on the server. Please check DEEPSEEK_API_KEY.")
 
     payload = {
         "model": "deepseek-chat",
