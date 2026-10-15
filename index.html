@@ -127,6 +127,26 @@
     @media (max-width: 700px) { .nav { height: 60px; padding: 0 16px; } .privacy { font-size: 11px; } main { padding: 25px 16px 20px; } h1 { letter-spacing: -.8px; } .intro { font-size: 14px; } .upload-card { padding: 14px; margin-top: 20px; } .workspace { grid-template-columns: 1fr; gap: 16px; margin-top: 18px; } .preview-stage { height: 360px; min-height: 240px; padding: 14px; } .output-body { height: 390px; min-height: 300px; } .card-header { padding: 12px 14px; min-height: 64px; } .panel-footer { padding: 10px 14px; } textarea { padding: 18px; font-size: 16px; } .start-hint { line-height: 1.7; max-width: 260px; margin: 25px auto; } .file-row { gap: 8px; padding: 10px; } .file-name { font-size: 13px; } .file-row > svg { display: none; } .file-row .secondary { padding: 9px; font-size: 12px; } .secondary, .icon-button { min-height: 44px; } .page-controls .icon-button { width: 44px; height: 44px; } }
     @media (max-width: 430px) { .privacy span { display: none; } .privacy::after { content: 'Local processing'; } .dropzone { padding: 13px; gap: 10px; } .browse { display: none; } .settings { display: grid; gap: 6px; } .settings select { width: 100%; } .upload-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; } .primary { padding: 12px 9px; font-size: 13px; } .primary svg { width: 17px; height: 17px; } .card-header { gap: 8px; } h2 { font-size: 14px; } h2 svg { display: none; } .actions { gap: 5px; } .actions .secondary { font-size: 12px; padding: 8px; } .output-footer { font-size: 11px; gap: 8px; } }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+    .structured-panel { margin-top: 24px; background: #fff; border: 1px solid #dfe7e2; border-radius: 14px; overflow: hidden; padding: 20px; }
+    .structured-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; border-bottom: 1px solid #e6ece8; padding-bottom: 14px; }
+    .structured-header h2 { font-size: 16px; font-weight: 650; color: #1e3a2b; margin: 0; }
+    .structured-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .meta-card { background: #f6f9f7; border: 1px solid #e2ebe5; border-radius: 10px; padding: 12px 14px; }
+    .meta-card-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; color: #587563; margin-bottom: 6px; }
+    .meta-card-content { font-size: 13px; color: #2d4235; line-height: 1.5; }
+    .data-table-container { overflow-x: auto; margin-bottom: 20px; border: 1px solid #e2ebe5; border-radius: 10px; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+    .data-table th { background: #eef4f0; color: #32513f; font-weight: 650; padding: 10px 14px; border-bottom: 1px solid #dce6e0; white-space: nowrap; }
+    .data-table td { padding: 10px 14px; border-bottom: 1px solid #eef2ef; color: #2e4437; vertical-align: top; }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: #fbfdfc; }
+    .totals-grid { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+    .totals-box { width: 340px; background: #f6f9f7; border: 1px solid #e2ebe5; border-radius: 10px; padding: 14px; font-size: 13px; }
+    .totals-row { display: flex; justify-content: space-between; padding: 4px 0; color: #435e4e; }
+    .totals-row.grand { border-top: 2px solid #32513f; font-weight: 700; font-size: 15px; color: #1e3a2b; margin-top: 6px; padding-top: 8px; }
+    .api-key-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; background: #f0f7f3; border: 1px solid #d3e5da; padding: 10px 14px; border-radius: 8px; font-size: 13px; flex-wrap: wrap; }
+    .api-key-bar input { flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #c2d8cc; border-radius: 6px; font-family: monospace; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -189,12 +209,52 @@
         <div class="panel-footer"><p class="preview-label" id="preview-label">Original image</p><div class="page-controls" id="page-controls" hidden><button type="button" class="icon-button" id="previous-page" aria-label="Previous PDF page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><select id="page-select" aria-label="Choose PDF page"></select><span id="page-position" aria-live="polite">1 / 1</span><button type="button" class="icon-button" id="next-page" aria-label="Next PDF page" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div></div>
       </section>
       <section class="card" aria-labelledby="output-heading">
-        <div class="card-header"><h2 id="output-heading"><svg aria-hidden="true"><use href="#i-scan"/></svg>Extracted text</h2><div class="actions"><button type="button" class="secondary" id="copy" disabled><svg aria-hidden="true"><use href="#i-copy"/></svg><span id="copy-label">Copy</span></button><button type="button" class="secondary" id="download" disabled aria-label="Download extracted text"><svg aria-hidden="true"><use href="#i-download"/></svg>Save text</button></div></div>
+        <div class="card-header"><h2 id="output-heading"><svg aria-hidden="true"><use href="#i-scan"/></svg>Extracted text</h2><div class="actions"><button type="button" class="primary" id="structure-table" disabled style="padding: 7px 12px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;"><svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"/></svg><span id="structure-table-label">Format to Table</span></button><button type="button" class="secondary" id="copy" disabled><svg aria-hidden="true"><use href="#i-copy"/></svg><span id="copy-label">Copy</span></button><button type="button" class="secondary" id="download" disabled aria-label="Download extracted text"><svg aria-hidden="true"><use href="#i-download"/></svg>Save text</button></div></div>
         <div class="output-body"><textarea id="output" readonly aria-label="Extracted text" spellcheck="false"></textarea><div class="empty" id="empty"><div class="empty-icon"><svg aria-hidden="true"><use href="#i-scan"/></svg></div><strong id="empty-title">Ready when you are</strong><p id="empty-description">Click Extract text to read your file.</p></div></div>
         <div class="panel-footer output-footer"><span id="counts">0 words · 0 characters</span><span class="ready" id="ready"><span class="dot"></span><span id="ready-label">Ready to extract</span></span></div>
         <div class="review-note" id="review-note" hidden>Text is editable. Compare it with the original and correct any errors before copying or saving.</div>
       </section>
     </div>
+    <section class="structured-panel" id="structured-panel" hidden>
+      <div class="structured-header">
+        <div>
+          <h2>Structured Invoice Table</h2>
+          <small style="color: #6d8073;">Arranged into clean columns & key-values with DeepSeek</small>
+        </div>
+        <div class="structured-actions">
+          <button type="button" class="secondary" id="deepseek-settings-btn" title="Set DeepSeek API Key">API Key</button>
+          <button type="button" class="secondary" id="export-json-btn">Download JSON</button>
+          <button type="button" class="primary" id="export-csv-btn"><svg aria-hidden="true" width="16" height="16"><use href="#i-download"/></svg>Download Excel / CSV</button>
+          <button type="button" class="icon-button" id="close-table-btn" title="Close table view">×</button>
+        </div>
+      </div>
+      <div class="api-key-bar" id="api-key-bar" hidden>
+        <label for="deepseek-key-input"><strong>DeepSeek API Key:</strong></label>
+        <input type="password" id="deepseek-key-input" placeholder="sk-..." autocomplete="off">
+        <button type="button" class="secondary" id="save-key-btn">Save Key</button>
+        <span id="key-saved-msg" style="color: #137d69; font-size: 12px;" hidden>Saved!</span>
+      </div>
+      <div class="meta-grid" id="structured-meta"></div>
+      <h3 style="font-size: 14px; font-weight: 650; margin: 18px 0 10px; color: #1e3a2b;">Line Items Table</h3>
+      <div class="data-table-container">
+        <table class="data-table" id="items-table">
+          <thead>
+            <tr>
+              <th style="width: 40px;">#</th>
+              <th>Description</th>
+              <th>HSN / SAC</th>
+              <th style="text-align: right;">Qty</th>
+              <th style="text-align: right;">Unit Price</th>
+              <th style="text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody id="items-table-body"></tbody>
+        </table>
+      </div>
+      <div class="totals-grid">
+        <div class="totals-box" id="totals-box"></div>
+      </div>
+    </section>
     <footer>For best results, use a clear image and select its text language.</footer>
   </main>
   <script src="extraction-utils.js"></script>
@@ -497,6 +557,7 @@
       $('empty').hidden = Boolean(text.trim());
       $('copy').disabled = !text.trim();
       $('download').disabled = !text.trim();
+      $('structure-table').disabled = !text.trim();
       const words = text.trim() ? text.trim().split(/\s+/u).length : 0;
       $('counts').textContent = `${words.toLocaleString()} words · ${text.length.toLocaleString()} characters`;
       $('review-note').hidden = !text.trim();
@@ -1055,6 +1116,7 @@
       documents = []; selectedDocumentId = null; pagePreviews = [];
       setOutput(''); message('');
       pageReports = []; $('quality').hidden = true;
+      $('structured-panel').hidden = true; currentStructuredData = null;
       $('workspace').hidden = true; $('start-hint').hidden = false; $('dropzone').hidden = false;
       $('file-input').value = ''; $('file-row').hidden = true; $('progress-wrap').hidden = true; $('extract').disabled = true;
       $('empty-title').textContent = 'Your text will appear here';
@@ -1091,6 +1153,236 @@
         setTimeout(() => { $('copy-all-label').textContent = 'Copy all'; }, 1800);
       } catch { message('Could not copy the full batch. Use Save all to download the organized results.'); }
     });
+
+    let currentStructuredData = null;
+
+    const savedKey = localStorage.getItem('deepseek_api_key') || '';
+    if (savedKey) $('deepseek-key-input').value = savedKey;
+
+    $('deepseek-settings-btn').addEventListener('click', () => {
+      $('api-key-bar').hidden = !$('api-key-bar').hidden;
+      if (!$('api-key-bar').hidden) $('deepseek-key-input').focus();
+    });
+
+    $('save-key-btn').addEventListener('click', () => {
+      const key = $('deepseek-key-input').value.trim();
+      if (key) {
+        localStorage.setItem('deepseek_api_key', key);
+        $('key-saved-msg').hidden = false;
+        setTimeout(() => { $('key-saved-msg').hidden = true; $('api-key-bar').hidden = true; }, 1500);
+      } else {
+        localStorage.removeItem('deepseek_api_key');
+        $('key-saved-msg').textContent = 'Key removed';
+        $('key-saved-msg').hidden = false;
+        setTimeout(() => { $('key-saved-msg').hidden = true; $('key-saved-msg').textContent = 'Saved!'; }, 1500);
+      }
+    });
+
+    $('close-table-btn').addEventListener('click', () => {
+      $('structured-panel').hidden = true;
+    });
+
+    $('structure-table').addEventListener('click', async () => {
+      const text = $('output').value.trim();
+      if (!text) return;
+
+      const apiKey = localStorage.getItem('deepseek_api_key') || $('deepseek-key-input').value.trim();
+
+      const btn = $('structure-table');
+      const label = $('structure-table-label');
+      const originalText = label.textContent;
+      label.textContent = 'Formatting with DeepSeek…';
+      btn.disabled = true;
+
+      try {
+        if (!backendURL) {
+          try { await guarded(discoverBackend(), 'Connecting to server', 8000); }
+          catch (e) { /* fallback */ }
+        }
+        const endpoint = `${backendURL || ''}/api/structure-invoice`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, api_key: apiKey })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 400 && /api key/i.test(data.detail || '')) {
+            $('api-key-bar').hidden = false;
+            $('deepseek-key-input').focus();
+            throw new Error('Please enter your DeepSeek API key above and click "Save Key".');
+          }
+          throw new Error(data.detail || 'DeepSeek structuring failed.');
+        }
+
+        currentStructuredData = data;
+        renderStructuredTable(data);
+        $('structured-panel').hidden = false;
+        $('structured-panel').scrollIntoView({ behavior: 'smooth' });
+        message('Invoice successfully organized into table format.');
+      } catch (err) {
+        message(`Structuring error: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        label.textContent = originalText;
+      }
+    });
+
+    function renderStructuredTable(data) {
+      const metaContainer = $('structured-meta');
+      metaContainer.replaceChildren();
+
+      const cards = [
+        {
+          title: 'Seller Details',
+          content: [
+            data.seller?.name ? `<strong>${escapeHtml(data.seller.name)}</strong>` : '',
+            data.seller?.address ? escapeHtml(data.seller.address) : '',
+            data.seller?.phone ? `Phone: ${escapeHtml(data.seller.phone)}` : '',
+            data.seller?.email ? `Email: ${escapeHtml(data.seller.email)}` : '',
+          ].filter(Boolean).join('<br>') || '<em>Not found</em>'
+        },
+        {
+          title: 'Invoice Details',
+          content: [
+            `<strong>Invoice No:</strong> ${escapeHtml(data.invoice_details?.invoice_no || '—')}`,
+            `<strong>Date:</strong> ${escapeHtml(data.invoice_details?.date || '—')}`,
+            `<strong>Terms:</strong> ${escapeHtml(data.invoice_details?.terms || '—')}`,
+            data.invoice_details?.customer_id ? `<strong>Customer ID:</strong> ${escapeHtml(data.invoice_details.customer_id)}` : ''
+          ].filter(Boolean).join('<br>')
+        },
+        {
+          title: 'Billed To / Customer',
+          content: [
+            data.billing_address?.name ? `<strong>${escapeHtml(data.billing_address.name)}</strong>` : '',
+            data.billing_address?.phone ? `Phone: ${escapeHtml(data.billing_address.phone)}` : '',
+            data.billing_address?.address ? escapeHtml(data.billing_address.address) : ''
+          ].filter(Boolean).join('<br>') || '<em>Not found</em>'
+        }
+      ];
+
+      for (const c of cards) {
+        const card = document.createElement('div');
+        card.className = 'meta-card';
+        card.innerHTML = `<div class="meta-card-title">${c.title}</div><div class="meta-card-content">${c.content}</div>`;
+        metaContainer.appendChild(card);
+      }
+
+      const tbody = $('items-table-body');
+      tbody.replaceChildren();
+
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (!items.length) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="6" style="text-align:center; color:#777; padding: 18px;">No line items found.</td>';
+        tbody.appendChild(row);
+      } else {
+        items.forEach((item, index) => {
+          const row = document.createElement('tr');
+          const qty = item.qty !== null && item.qty !== undefined ? item.qty : '—';
+          const price = typeof item.unit_price === 'number' ? item.unit_price.toFixed(2) : (item.unit_price || '—');
+          const amount = typeof item.amount === 'number' ? item.amount.toFixed(2) : (item.amount || '—');
+
+          row.innerHTML = `
+            <td>${index + 1}</td>
+            <td><strong>${escapeHtml(item.description || '—')}</strong></td>
+            <td><code>${escapeHtml(item.hsn_code || '—')}</code></td>
+            <td style="text-align: right;">${escapeHtml(String(qty))}</td>
+            <td style="text-align: right;">${escapeHtml(String(price))}</td>
+            <td style="text-align: right;"><strong>${escapeHtml(String(amount))}</strong></td>
+          `;
+          tbody.appendChild(row);
+        });
+      }
+
+      const totalsBox = $('totals-box');
+      const t = data.totals || {};
+      const formatAmount = (val) => typeof val === 'number' ? val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (val || '—');
+
+      totalsBox.innerHTML = `
+        ${t.subtotal ? `<div class="totals-row"><span>Subtotal:</span><span>${formatAmount(t.subtotal)}</span></div>` : ''}
+        ${t.freight_charges ? `<div class="totals-row"><span>Freight Charges:</span><span>${formatAmount(t.freight_charges)}</span></div>` : ''}
+        ${t.sgst_amount ? `<div class="totals-row"><span>SGST ${t.sgst_rate ? `(${escapeHtml(t.sgst_rate)})` : ''}:</span><span>${formatAmount(t.sgst_amount)}</span></div>` : ''}
+        ${t.cgst_amount ? `<div class="totals-row"><span>CGST ${t.cgst_rate ? `(${escapeHtml(t.cgst_rate)})` : ''}:</span><span>${formatAmount(t.cgst_amount)}</span></div>` : ''}
+        <div class="totals-row grand"><span>Grand Total:</span><span>${formatAmount(t.grand_total)}</span></div>
+        ${t.amount_in_words ? `<div style="font-size: 11px; color: #587563; margin-top: 8px; font-style: italic;">Amount in words: ${escapeHtml(t.amount_in_words)}</div>` : ''}
+        ${data.payment_notes ? `<div style="font-size: 11px; color: #75877b; margin-top: 6px;">Note: ${escapeHtml(data.payment_notes)}</div>` : ''}
+      `;
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '').replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+    }
+
+    $('export-csv-btn').addEventListener('click', () => {
+      if (!currentStructuredData) return;
+      const doc = currentDocument();
+      const baseName = doc ? doc.file.name.replace(/\.[^.]+$/, '') : 'invoice';
+      exportInvoiceToCSV(currentStructuredData, `${baseName}-structured.csv`);
+    });
+
+    $('export-json-btn').addEventListener('click', () => {
+      if (!currentStructuredData) return;
+      const doc = currentDocument();
+      const baseName = doc ? doc.file.name.replace(/\.[^.]+$/, '') : 'invoice';
+      const blob = new Blob([JSON.stringify(currentStructuredData, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${baseName}-structured.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    function exportInvoiceToCSV(data, filename) {
+      const rows = [];
+      rows.push(['Invoice Metadata', '']);
+      rows.push(['Seller Name', data.seller?.name || '']);
+      rows.push(['Seller Address', data.seller?.address || '']);
+      rows.push(['Seller Phone', data.seller?.phone || '']);
+      rows.push(['Seller Email', data.seller?.email || '']);
+      rows.push(['Invoice No', data.invoice_details?.invoice_no || '']);
+      rows.push(['Invoice Date', data.invoice_details?.date || '']);
+      rows.push(['Payment Terms', data.invoice_details?.terms || '']);
+      rows.push(['Customer / Billed To', data.billing_address?.name || '']);
+      rows.push(['Customer Phone', data.billing_address?.phone || '']);
+      rows.push(['Customer Address', data.billing_address?.address || '']);
+      rows.push([]);
+      rows.push(['Line Items']);
+      rows.push(['#', 'Description', 'HSN / SAC Code', 'Quantity', 'Unit Price', 'Amount']);
+
+      const items = Array.isArray(data.items) ? data.items : [];
+      items.forEach((item, idx) => {
+        rows.push([
+          idx + 1,
+          item.description || '',
+          item.hsn_code || '',
+          item.qty ?? '',
+          item.unit_price ?? '',
+          item.amount ?? ''
+        ]);
+      });
+
+      rows.push([]);
+      rows.push(['Totals & Taxes']);
+      const t = data.totals || {};
+      if (t.subtotal !== undefined) rows.push(['Subtotal', t.subtotal]);
+      if (t.freight_charges !== undefined) rows.push(['Freight Charges', t.freight_charges]);
+      if (t.sgst_amount !== undefined) rows.push([`SGST ${t.sgst_rate || ''}`, t.sgst_amount]);
+      if (t.cgst_amount !== undefined) rows.push([`CGST ${t.cgst_rate || ''}`, t.cgst_amount]);
+      rows.push(['Grand Total', t.grand_total ?? '']);
+      if (t.amount_in_words) rows.push(['Amount in Words', t.amount_in_words]);
+
+      const csvContent = '\uFEFF' + rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
   </script>
 </body>
 </html>

@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .ocr import OCRService, RECOGNIZERS
+from .deepseek import parse_invoice_with_deepseek
 from .config import comma_separated_setting, load_server_config
 from .limits import PublicOCRLimitsMiddleware
 
@@ -144,6 +145,24 @@ def create_app(service=None):
                 image.close()
         finally:
             await file.close()
+
+    @app.post('/api/structure-invoice')
+    async def structure_invoice(request: Request):
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, 'Invalid JSON request.')
+        text = str(body.get('text', '')).strip()
+        api_key = str(body.get('api_key', '')).strip() or None
+        if not text:
+            raise HTTPException(400, 'No invoice text provided.')
+        try:
+            return await parse_invoice_with_deepseek(text, api_key=api_key)
+        except ValueError as err:
+            raise HTTPException(400, str(err))
+        except Exception as err:
+            logger.exception('DeepSeek invoice structuring failed')
+            raise HTTPException(502, f'DeepSeek structuring failed: {str(err)}')
 
     return app
 
