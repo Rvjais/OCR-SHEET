@@ -7,6 +7,7 @@
     "test:batch": "node tests/batch-browser.cjs",
     "test:handwriting": "node tests/handwriting-browser.cjs",
     "test:providers": "node tests/providers-browser.cjs",
+    "test:structured": "node tests/structured-browser.cjs",
     "test:long-pdf": "node tests/long-pdf-browser.cjs"
   },
   "devDependencies": {

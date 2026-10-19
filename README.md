@@ -18,7 +18,7 @@ Live: `https://ocr-sheet-topaz.vercel.app` → Backend: `https://72-61-224-90.ss
 - ✍️ **Printed + handwritten mode (default):** backend PaddleOCR PP-OCRv5 (`mobile_det` + `en/latin/devanagari_rec` + orientation), 2400px bound, 2x upscale if <1280px
 - 📑 Native PDF text extraction + hybrid `mergeHybrid()` keeps handwritten suffixes next to printed labels
 - 📊 Quality panel: weighted confidence, `<85` flagged, `<80` uncertain words, review notes
-- 💾 Export: per-page Copy/Save, Copy-all/Save-all with headings, Format-to-Table → invoice meta-cards + line-items + totals → JSON/CSV
+- 💾 Export: per-page Copy/Save, Copy-all/Save-all with headings, Format-to-Table → your invoice fields (store, address, state, invoice no, customer, mobile, items, GST, payable) → JSON/CSV/Excel with `Not found` for missing values
 - 🔒 Privacy: 20MB/20MP limits, in-memory decode (no persistence/logging), rate-limited public endpoint
 
 ## 🎯 Features in Detail — What it does & How it helps you
@@ -30,7 +30,8 @@ Live: `https://ocr-sheet-topaz.vercel.app` → Backend: `https://72-61-224-90.ss
 | ✍️ **Handwriting mode (local backend)** | PaddleOCR PP-OCRv5 reads full page PNG (2400px cap, 2x upscale), Devanagari/Latin support. | Reads handwritten totals, signatures, Hindi notes that normal OCR misses. |
 | 📑 **Hybrid selectable + handwritten** | Merges exact PDF text layer with OCR suffixes next to labels. | Printed invoice + pen-written phone/amount both captured — no manual re-type. |
 | 📊 **Confidence + review guidance** | Weighted score, `<85` flagged, `<80` word highlight, edit box with notes. | Spot errors in seconds — accountant checks only red words, not full page. |
-| 🧾 **Format to Table (DeepSeek)** | Converts raw text → seller/invoice/items/totals JSON → CSV download + meta-cards. | Paste into Tally/Excel directly — saves 15 min per invoice. |
+| 🧾 **Format to Table (DeepSeek)** | Converts raw text → store name/address/state, invoice no, customer name/mobile, line items (qty, rate, amount, GST), invoice GST, payable amount + account. Missing values become **Not found**. Exports JSON, CSV and real **.xlsx**. | Paste into Tally/Excel directly — one row per invoice, no blank cells to puzzle over. |
+| 🛒 **Product list verification** | Upload your Excel/CSV price list once (kept in your browser). Scanned names are fuzzy-matched (typos, letter/digit swaps) to your list; rates are cross-checked strictly. Anything unmatched, mismatched or missing a rate is **flagged for manual verification** with a reason list. | Handwriting errors get auto-corrected to real product names, and you only hand-check the rows the app explicitly lists. |
 | 💾 **Copy-all / Save-all** | Exports in upload order with filename/page headings + failed-page notices. | Client-ready text file, identical filenames kept separate — no confusion. |
 | 🌐 **5 languages** | `eng, eng+hin, eng+spa, eng+fra, eng+deu` toggle, fresh extraction on change. | Hindi bills + English + EU invoices in one tool. |
 | 🔒 **Privacy + limits** | In-memory decode, no logs, 20MB/20MP cap, 429 rate-limit, offline model preload. | Safe for Aadhaar/PAN scans — nothing stored, abuse blocked. |
@@ -95,6 +96,7 @@ docker run -p 8000:8000 textlens
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p 'test_*.py' -v
 npm test
 npm run test:browser
+npm run test:structured
 ```
 
 GitHub Actions builds full image, checks offline recognition with network disabled + read-only FS.

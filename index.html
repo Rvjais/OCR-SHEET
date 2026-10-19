@@ -147,6 +147,29 @@
     .totals-row.grand { border-top: 2px solid #32513f; font-weight: 700; font-size: 15px; color: #1e3a2b; margin-top: 6px; padding-top: 8px; }
     .api-key-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; background: #f0f7f3; border: 1px solid #d3e5da; padding: 10px 14px; border-radius: 8px; font-size: 13px; flex-wrap: wrap; }
     .api-key-bar input { flex: 1; min-width: 200px; padding: 6px 10px; border: 1px solid #c2d8cc; border-radius: 6px; font-family: monospace; font-size: 12px; }
+    .catalog-bar { display: grid; gap: 10px; margin-bottom: 16px; padding: 12px 14px; background: #f0f7f3; border: 1px solid #d3e5da; border-radius: 8px; font-size: 13px; }
+    .catalog-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .catalog-status { flex: 1; min-width: 200px; color: #526b5c; line-height: 1.5; }
+    .catalog-status strong { color: #23342e; }
+    .catalog-status.warn { color: #946017; }
+    .catalog-columns { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .catalog-columns label { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #5b7064; }
+    .catalog-columns select { width: auto; min-width: 170px; min-height: 36px; padding: 6px 8px; font-size: 12px; }
+    .verification-banner { margin-bottom: 18px; padding: 12px 15px; border-radius: 9px; font-size: 13px; line-height: 1.6; border: 1px solid #f0d9b0; background: #fdf6e8; color: #7a5410; }
+    .verification-banner.ok { border-color: #cfe6d5; background: #eef8f1; color: #1e6b4a; }
+    .verification-banner ul { margin: 8px 0 0; padding-left: 18px; }
+    .verification-banner li { margin: 3px 0; }
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 650; white-space: nowrap; }
+    .status-badge.ok { background: #e2f2e8; color: #1e6b4a; }
+    .status-badge.warn { background: #fbf0d9; color: #8a5f14; }
+    .status-badge.bad { background: #fbe4e4; color: #a33a3a; }
+    .status-badge.muted { background: #eceff0; color: #63766d; }
+    .data-table tr.flagged td { background: #fdf7f0; }
+    .data-table tr.flagged:hover td { background: #fbf1e6; }
+    .row-note { margin-top: 5px; font-size: 11px; color: #8a6a3a; line-height: 1.45; }
+    .matched-name { color: #1e6b4a; font-weight: 600; }
+    .not-found { color: #98a6a0; font-style: italic; }
+    @media (max-width: 700px) { .catalog-columns { gap: 8px; } .catalog-columns select { min-width: 140px; } }
   </style>
 </head>
 <body>
@@ -219,14 +242,28 @@
       <div class="structured-header">
         <div>
           <h2>Structured Invoice Table</h2>
-          <small style="color: #6d8073;">Arranged into clean columns & key-values with DeepSeek</small>
+          <small style="color: #6d8073;">Extracted with OCR + DeepSeek, verified against your product list</small>
         </div>
         <div class="structured-actions">
           <button type="button" class="secondary" id="export-json-btn">Download JSON</button>
-          <button type="button" class="primary" id="export-csv-btn"><svg aria-hidden="true" width="16" height="16"><use href="#i-download"/></svg>Download Excel / CSV</button>
+          <button type="button" class="secondary" id="export-csv-btn">Download CSV</button>
+          <button type="button" class="primary" id="export-xlsx-btn"><svg aria-hidden="true" width="16" height="16"><use href="#i-download"/></svg>Download Excel (.xlsx)</button>
           <button type="button" class="icon-button" id="close-table-btn" title="Close table view">×</button>
         </div>
       </div>
+      <div class="catalog-bar" id="catalog-bar">
+        <input type="file" id="catalog-input" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden>
+        <div class="catalog-row">
+          <button type="button" class="secondary" id="catalog-choose"><svg aria-hidden="true"><use href="#i-upload"/></svg><span id="catalog-choose-label">Upload product list</span></button>
+          <span class="catalog-status" id="catalog-status">No product list loaded. Upload your Excel or CSV (product name + price) to verify scanned products and rates.</span>
+          <button type="button" class="icon-button" id="catalog-clear" aria-label="Remove product list" title="Remove product list" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+        </div>
+        <div class="catalog-columns" id="catalog-columns" hidden>
+          <label>Product column <select id="catalog-name-column"></select></label>
+          <label>Price column <select id="catalog-price-column"></select></label>
+        </div>
+      </div>
+      <div class="verification-banner" id="verification-banner" hidden></div>
       <div class="meta-grid" id="structured-meta"></div>
       <h3 style="font-size: 14px; font-weight: 650; margin: 18px 0 10px; color: #1e3a2b;">Line Items Table</h3>
       <div class="data-table-container">
@@ -234,11 +271,13 @@
           <thead>
             <tr>
               <th style="width: 40px;">#</th>
-              <th>Description</th>
-              <th>HSN / SAC</th>
+              <th>Product Name / Description</th>
               <th style="text-align: right;">Qty</th>
-              <th style="text-align: right;">Unit Price</th>
+              <th style="text-align: right;">Rate</th>
               <th style="text-align: right;">Amount</th>
+              <th style="text-align: right;">GST</th>
+              <th>Matched Product</th>
+              <th>Check</th>
             </tr>
           </thead>
           <tbody id="items-table-body"></tbody>
@@ -1108,7 +1147,7 @@
       documents = []; selectedDocumentId = null; pagePreviews = [];
       setOutput(''); message('');
       pageReports = []; $('quality').hidden = true;
-      $('structured-panel').hidden = true; currentStructuredData = null;
+      $('structured-panel').hidden = true; currentStructuredData = null; currentMatches = null;
       $('workspace').hidden = true; $('start-hint').hidden = false; $('dropzone').hidden = false;
       $('file-input').value = ''; $('file-row').hidden = true; $('progress-wrap').hidden = true; $('extract').disabled = true;
       $('empty-title').textContent = 'Your text will appear here';
@@ -1147,6 +1186,148 @@
     });
 
     let currentStructuredData = null;
+    let currentMatches = null;
+    let productCatalog = [];
+    let catalogMeta = null;
+    let catalogMatrix = null;
+    let xlsxPromise = null;
+    const CATALOG_KEY = 'textlens.catalog.v1';
+    const XLSX_BASE = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/';
+    const CATALOG_DEFAULT_STATUS = 'No product list loaded. Upload your Excel or CSV (product name + price) to verify scanned products and rates.';
+
+    try {
+      const savedCatalog = JSON.parse(localStorage.getItem(CATALOG_KEY) || 'null');
+      if (Array.isArray(savedCatalog?.products) && savedCatalog.products.length) {
+        productCatalog = savedCatalog.products.map(pair => ({ name: String(pair?.[0] ?? '').trim(), price: typeof pair?.[1] === 'number' ? pair[1] : Utils.parseAmount(pair?.[1]) })).filter(product => product.name);
+        catalogMeta = { fileName: String(savedCatalog.fileName || ''), updated: String(savedCatalog.updated || ''), headerRow: 0, nameColumn: 0, priceColumn: -1 };
+      }
+    } catch { /* a corrupted saved list is ignored */ }
+
+    function loadXLSX() {
+      if (window.XLSX) return Promise.resolve(window.XLSX);
+      if (!xlsxPromise) {
+        xlsxPromise = new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          const timer = setTimeout(() => { script.remove(); xlsxPromise = null; reject(new Error('Loading Excel tools timed out. Check your connection and try again.')); }, 30000);
+          script.src = `${XLSX_BASE}xlsx.full.min.js`;
+          script.onload = () => { clearTimeout(timer); resolve(window.XLSX); };
+          script.onerror = () => { clearTimeout(timer); script.remove(); xlsxPromise = null; reject(new Error('Could not load the Excel tools. Check your internet connection and try again.')); };
+          document.head.append(script);
+        });
+      }
+      return xlsxPromise;
+    }
+
+    function saveCatalog() {
+      try {
+        localStorage.setItem(CATALOG_KEY, JSON.stringify({
+          products: productCatalog.slice(0, 20000).map(product => [product.name, product.price]),
+          fileName: catalogMeta?.fileName || '',
+          updated: catalogMeta?.updated || ''
+        }));
+      } catch { /* a list too large to persist stays in memory for this session */ }
+    }
+
+    function catalogStatus(text, warn = false) {
+      $('catalog-status').textContent = text;
+      $('catalog-status').classList.toggle('warn', warn);
+    }
+
+    function updateCatalogUI() {
+      $('catalog-clear').hidden = !productCatalog.length;
+      $('catalog-choose-label').textContent = productCatalog.length ? 'Replace product list' : 'Upload product list';
+      const columns = $('catalog-columns');
+      if (catalogMeta && Array.isArray(catalogMatrix)) {
+        columns.hidden = false;
+        const headers = catalogMatrix[catalogMeta.headerRow] || [];
+        const width = Math.max(headers.length, ...catalogMatrix.slice(0, 20).map(row => (Array.isArray(row) ? row.length : 0)));
+        const nameSelect = $('catalog-name-column'), priceSelect = $('catalog-price-column');
+        nameSelect.replaceChildren(); priceSelect.replaceChildren();
+        priceSelect.add(new Option('None — names only', '-1'));
+        for (let index = 0; index < width; index++) {
+          const label = headers[index] ? `${String(headers[index]).slice(0, 40)} (col ${index + 1})` : `Column ${index + 1}`;
+          nameSelect.add(new Option(label, String(index)));
+          priceSelect.add(new Option(label, String(index)));
+        }
+        nameSelect.value = String(catalogMeta.nameColumn);
+        priceSelect.value = String(catalogMeta.priceColumn);
+      } else columns.hidden = true;
+      if (productCatalog.length) {
+        const updated = catalogMeta?.updated ? ` Uploaded ${new Date(catalogMeta.updated).toLocaleDateString()}.` : '';
+        $('catalog-status').innerHTML = `<strong>${productCatalog.length.toLocaleString()}</strong> products loaded${catalogMeta?.fileName ? ` from ${escapeHtml(catalogMeta.fileName)}` : ''}.${updated}`;
+        $('catalog-status').classList.remove('warn');
+      } else catalogStatus(CATALOG_DEFAULT_STATUS);
+    }
+
+    async function handleCatalogFile(file) {
+      catalogStatus('Reading your product list…');
+      try {
+        let matrix;
+        if (/\.xlsx?$/i.test(file.name)) {
+          const XLSX = await guarded(loadXLSX(), 'Loading Excel tools', 30000);
+          const workbook = XLSX.read(await guarded(file.arrayBuffer(), 'Reading the product list'), { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+        } else {
+          matrix = Utils.parseDelimitedRows(await guarded(file.text(), 'Reading the product list'));
+        }
+        if (!Array.isArray(matrix) || !matrix.length) throw new Error('The file looks empty.');
+        applyCatalogMatrix(matrix, file.name);
+      } catch (error) {
+        catalogStatus(`Could not read that list: ${error.message}`, true);
+      }
+    }
+
+    function applyCatalogMatrix(matrix, fileName) {
+      catalogMatrix = matrix;
+      const detected = Utils.detectCatalogTable(matrix);
+      catalogMeta = {
+        fileName,
+        updated: new Date().toISOString(),
+        headerRow: detected.headerRow >= 0 ? detected.headerRow : 0,
+        nameColumn: detected.nameColumn >= 0 ? detected.nameColumn : 0,
+        priceColumn: detected.priceColumn
+      };
+      rebuildCatalog();
+    }
+
+    function rebuildCatalog() {
+      productCatalog = Utils.catalogFromMatrix(catalogMatrix, { headerRow: catalogMeta.headerRow, nameColumn: catalogMeta.nameColumn, priceColumn: catalogMeta.priceColumn });
+      catalogMeta.updated = new Date().toISOString();
+      saveCatalog();
+      updateCatalogUI();
+      refreshMatches();
+      if (!productCatalog.length) catalogStatus('No usable product rows were found — pick the correct columns below.', true);
+      else if (catalogMeta.priceColumn < 0) catalogStatus(`${productCatalog.length.toLocaleString()} products loaded, but no price column was found — pick the price column below.`, true);
+    }
+
+    function applyCatalogColumns() {
+      if (!catalogMatrix || !catalogMeta) return;
+      catalogMeta.nameColumn = Number($('catalog-name-column').value);
+      catalogMeta.priceColumn = Number($('catalog-price-column').value);
+      rebuildCatalog();
+    }
+
+    function refreshMatches() {
+      if (!currentStructuredData) return;
+      currentMatches = Utils.matchInvoice(currentStructuredData, productCatalog);
+      renderStructuredTable(currentStructuredData, currentMatches);
+    }
+
+    $('catalog-choose').addEventListener('click', () => $('catalog-input').click());
+    $('catalog-input').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      event.target.value = '';
+      if (file) handleCatalogFile(file);
+    });
+    $('catalog-clear').addEventListener('click', () => {
+      productCatalog = []; catalogMeta = null; catalogMatrix = null;
+      try { localStorage.removeItem(CATALOG_KEY); } catch { /* ignore */ }
+      updateCatalogUI();
+      refreshMatches();
+    });
+    $('catalog-name-column').addEventListener('change', applyCatalogColumns);
+    $('catalog-price-column').addEventListener('change', applyCatalogColumns);
 
     $('close-table-btn').addEventListener('click', () => {
       $('structured-panel').hidden = true;
@@ -1180,7 +1361,8 @@
         }
 
         currentStructuredData = data;
-        renderStructuredTable(data);
+        currentMatches = Utils.matchInvoice(data, productCatalog);
+        renderStructuredTable(data, currentMatches);
         $('structured-panel').hidden = false;
         $('structured-panel').scrollIntoView({ behavior: 'smooth' });
         message('Invoice successfully organized into table format.');
@@ -1192,36 +1374,40 @@
       }
     });
 
-    function renderStructuredTable(data) {
+    function cellMarkup(value) {
+      return Utils.isNotFound(value) ? '<span class="not-found">Not found</span>' : escapeHtml(String(value).trim());
+    }
+
+    function renderStructuredTable(data, match) {
       const metaContainer = $('structured-meta');
       metaContainer.replaceChildren();
-
+      const store = data?.store || {}, invoice = data?.invoice || {}, customer = data?.customer || {}, payable = data?.payable || {};
       const cards = [
         {
-          title: 'Seller Details',
+          title: 'Store',
           content: [
-            data.seller?.name ? `<strong>${escapeHtml(data.seller.name)}</strong>` : '',
-            data.seller?.address ? escapeHtml(data.seller.address) : '',
-            data.seller?.phone ? `Phone: ${escapeHtml(data.seller.phone)}` : '',
-            data.seller?.email ? `Email: ${escapeHtml(data.seller.email)}` : '',
-          ].filter(Boolean).join('<br>') || '<em>Not found</em>'
-        },
-        {
-          title: 'Invoice Details',
-          content: [
-            `<strong>Invoice No:</strong> ${escapeHtml(data.invoice_details?.invoice_no || '—')}`,
-            `<strong>Date:</strong> ${escapeHtml(data.invoice_details?.date || '—')}`,
-            `<strong>Terms:</strong> ${escapeHtml(data.invoice_details?.terms || '—')}`,
-            data.invoice_details?.customer_id ? `<strong>Customer ID:</strong> ${escapeHtml(data.invoice_details.customer_id)}` : ''
+            Utils.isNotFound(store.name) ? '' : `<strong>${escapeHtml(String(store.name).trim())}</strong>`,
+            `<strong>Address:</strong> ${cellMarkup(store.address)}`,
+            `<strong>State:</strong> ${cellMarkup(store.state)}`
           ].filter(Boolean).join('<br>')
         },
         {
-          title: 'Billed To / Customer',
+          title: 'Invoice',
+          content: `<strong>Invoice No:</strong> ${cellMarkup(invoice.number)}`
+        },
+        {
+          title: 'Customer',
           content: [
-            data.billing_address?.name ? `<strong>${escapeHtml(data.billing_address.name)}</strong>` : '',
-            data.billing_address?.phone ? `Phone: ${escapeHtml(data.billing_address.phone)}` : '',
-            data.billing_address?.address ? escapeHtml(data.billing_address.address) : ''
-          ].filter(Boolean).join('<br>') || '<em>Not found</em>'
+            Utils.isNotFound(customer.name) ? '' : `<strong>${escapeHtml(String(customer.name).trim())}</strong>`,
+            `<strong>Mobile:</strong> ${cellMarkup(customer.mobile)}`
+          ].filter(Boolean).join('<br>')
+        },
+        {
+          title: 'Payable',
+          content: [
+            `<strong>Amount:</strong> ${cellMarkup(payable.amount)}`,
+            `<strong>Account:</strong> ${cellMarkup(payable.account)}`
+          ].join('<br>')
         }
       ];
 
@@ -1234,44 +1420,70 @@
 
       const tbody = $('items-table-body');
       tbody.replaceChildren();
-
-      const items = Array.isArray(data.items) ? data.items : [];
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const results = Array.isArray(match?.items) ? match.items : [];
+      const badges = {
+        matched: '<span class="status-badge ok">Verified</span>',
+        verify: '<span class="status-badge warn">Check</span>',
+        'price-mismatch': '<span class="status-badge bad">Rate mismatch</span>',
+        'not-matched': '<span class="status-badge bad">Not in list</span>',
+        'no-list': '<span class="status-badge muted">No list</span>'
+      };
       if (!items.length) {
         const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="6" style="text-align:center; color:#777; padding: 18px;">No line items found.</td>';
+        row.innerHTML = '<td colspan="8" style="text-align:center; color:#777; padding: 18px;">No line items found.</td>';
         tbody.appendChild(row);
       } else {
         items.forEach((item, index) => {
+          const result = results[index] || {
+            description: Utils.valueOrNotFound(item?.description),
+            quantity: Utils.valueOrNotFound(item?.quantity),
+            rate: Utils.valueOrNotFound(item?.rate),
+            amount: Utils.valueOrNotFound(item?.amount),
+            gst: 'Not found', matchedName: '', matchStatus: 'no-list', note: ''
+          };
           const row = document.createElement('tr');
-          const qty = item.qty !== null && item.qty !== undefined ? item.qty : '—';
-          const price = typeof item.unit_price === 'number' ? item.unit_price.toFixed(2) : (item.unit_price || '—');
-          const amount = typeof item.amount === 'number' ? item.amount.toFixed(2) : (item.amount || '—');
-
+          if (['verify', 'price-mismatch', 'not-matched'].includes(result.matchStatus)) row.className = 'flagged';
+          const matchedCell = Utils.isNotFound(result.matchedName) ? '—' : `<span class="matched-name">${escapeHtml(String(result.matchedName))}</span>`;
           row.innerHTML = `
             <td>${index + 1}</td>
-            <td><strong>${escapeHtml(item.description || '—')}</strong></td>
-            <td><code>${escapeHtml(item.hsn_code || '—')}</code></td>
-            <td style="text-align: right;">${escapeHtml(String(qty))}</td>
-            <td style="text-align: right;">${escapeHtml(String(price))}</td>
-            <td style="text-align: right;"><strong>${escapeHtml(String(amount))}</strong></td>
+            <td><strong>${cellMarkup(result.description)}</strong>${result.note ? `<div class="row-note">${escapeHtml(result.note)}</div>` : ''}</td>
+            <td style="text-align: right;">${cellMarkup(result.quantity)}</td>
+            <td style="text-align: right;">${cellMarkup(result.rate)}</td>
+            <td style="text-align: right;">${cellMarkup(result.amount)}</td>
+            <td style="text-align: right;">${cellMarkup(result.gst)}</td>
+            <td>${matchedCell}</td>
+            <td>${badges[result.matchStatus] || ''}</td>
           `;
           tbody.appendChild(row);
         });
       }
+      renderVerification(match);
 
       const totalsBox = $('totals-box');
-      const t = data.totals || {};
-      const formatAmount = (val) => typeof val === 'number' ? val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (val || '—');
-
+      const gst = data?.gst || {};
       totalsBox.innerHTML = `
-        ${t.subtotal ? `<div class="totals-row"><span>Subtotal:</span><span>${formatAmount(t.subtotal)}</span></div>` : ''}
-        ${t.freight_charges ? `<div class="totals-row"><span>Freight Charges:</span><span>${formatAmount(t.freight_charges)}</span></div>` : ''}
-        ${t.sgst_amount ? `<div class="totals-row"><span>SGST ${t.sgst_rate ? `(${escapeHtml(t.sgst_rate)})` : ''}:</span><span>${formatAmount(t.sgst_amount)}</span></div>` : ''}
-        ${t.cgst_amount ? `<div class="totals-row"><span>CGST ${t.cgst_rate ? `(${escapeHtml(t.cgst_rate)})` : ''}:</span><span>${formatAmount(t.cgst_amount)}</span></div>` : ''}
-        <div class="totals-row grand"><span>Grand Total:</span><span>${formatAmount(t.grand_total)}</span></div>
-        ${t.amount_in_words ? `<div style="font-size: 11px; color: #587563; margin-top: 8px; font-style: italic;">Amount in words: ${escapeHtml(t.amount_in_words)}</div>` : ''}
-        ${data.payment_notes ? `<div style="font-size: 11px; color: #75877b; margin-top: 6px;">Note: ${escapeHtml(data.payment_notes)}</div>` : ''}
+        ${Utils.isNotFound(gst.rate) ? '' : `<div class="totals-row"><span>GST Rate:</span><span>${cellMarkup(gst.rate)}</span></div>`}
+        ${Utils.isNotFound(gst.cgst) ? '' : `<div class="totals-row"><span>CGST:</span><span>${cellMarkup(gst.cgst)}</span></div>`}
+        ${Utils.isNotFound(gst.sgst) ? '' : `<div class="totals-row"><span>SGST:</span><span>${cellMarkup(gst.sgst)}</span></div>`}
+        ${Utils.isNotFound(gst.igst) ? '' : `<div class="totals-row"><span>IGST:</span><span>${cellMarkup(gst.igst)}</span></div>`}
+        ${Utils.isNotFound(gst.amount) ? '' : `<div class="totals-row"><span>GST Amount:</span><span>${cellMarkup(gst.amount)}</span></div>`}
+        <div class="totals-row grand"><span>Payable Amount:</span><span>${cellMarkup(payable.amount)}</span></div>
+        ${Utils.isNotFound(payable.account) ? '' : `<div class="totals-row"><span>Payable Account:</span><span>${cellMarkup(payable.account)}</span></div>`}
       `;
+    }
+
+    function renderVerification(match) {
+      const banner = $('verification-banner');
+      if (!match?.hasCatalog || !match.total) { banner.hidden = true; return; }
+      const flagged = (match.items || []).filter(item => ['verify', 'price-mismatch', 'not-matched'].includes(item.matchStatus));
+      banner.hidden = false;
+      banner.classList.toggle('ok', flagged.length === 0);
+      if (!flagged.length) {
+        banner.innerHTML = `<strong>All ${match.total} product ${match.total === 1 ? 'row' : 'rows'} verified</strong> against your list — names matched and rates equal.`;
+        return;
+      }
+      banner.innerHTML = `<strong>⚠ ${flagged.length} of ${match.total} product row${match.total === 1 ? '' : 's'} need manual verification</strong><ul>${flagged.map(item => `<li>“${escapeHtml(Utils.isNotFound(item.description) ? 'Not found' : String(item.description))}” — ${escapeHtml(item.note || 'check manually')}</li>`).join('')}</ul>`;
     }
 
     function escapeHtml(str) {
@@ -1280,72 +1492,57 @@
 
     $('export-csv-btn').addEventListener('click', () => {
       if (!currentStructuredData) return;
-      const doc = currentDocument();
-      const baseName = doc ? doc.file.name.replace(/\.[^.]+$/, '') : 'invoice';
-      exportInvoiceToCSV(currentStructuredData, `${baseName}-structured.csv`);
-    });
-
-    $('export-json-btn').addEventListener('click', () => {
-      if (!currentStructuredData) return;
-      const doc = currentDocument();
-      const baseName = doc ? doc.file.name.replace(/\.[^.]+$/, '') : 'invoice';
-      const blob = new Blob([JSON.stringify(currentStructuredData, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${baseName}-structured.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-
-    function exportInvoiceToCSV(data, filename) {
-      const rows = [];
-      rows.push(['Invoice Metadata', '']);
-      rows.push(['Seller Name', data.seller?.name || '']);
-      rows.push(['Seller Address', data.seller?.address || '']);
-      rows.push(['Seller Phone', data.seller?.phone || '']);
-      rows.push(['Seller Email', data.seller?.email || '']);
-      rows.push(['Invoice No', data.invoice_details?.invoice_no || '']);
-      rows.push(['Invoice Date', data.invoice_details?.date || '']);
-      rows.push(['Payment Terms', data.invoice_details?.terms || '']);
-      rows.push(['Customer / Billed To', data.billing_address?.name || '']);
-      rows.push(['Customer Phone', data.billing_address?.phone || '']);
-      rows.push(['Customer Address', data.billing_address?.address || '']);
-      rows.push([]);
-      rows.push(['Line Items']);
-      rows.push(['#', 'Description', 'HSN / SAC Code', 'Quantity', 'Unit Price', 'Amount']);
-
-      const items = Array.isArray(data.items) ? data.items : [];
-      items.forEach((item, idx) => {
-        rows.push([
-          idx + 1,
-          item.description || '',
-          item.hsn_code || '',
-          item.qty ?? '',
-          item.unit_price ?? '',
-          item.amount ?? ''
-        ]);
-      });
-
-      rows.push([]);
-      rows.push(['Totals & Taxes']);
-      const t = data.totals || {};
-      if (t.subtotal !== undefined) rows.push(['Subtotal', t.subtotal]);
-      if (t.freight_charges !== undefined) rows.push(['Freight Charges', t.freight_charges]);
-      if (t.sgst_amount !== undefined) rows.push([`SGST ${t.sgst_rate || ''}`, t.sgst_amount]);
-      if (t.cgst_amount !== undefined) rows.push([`CGST ${t.cgst_rate || ''}`, t.cgst_amount]);
-      rows.push(['Grand Total', t.grand_total ?? '']);
-      if (t.amount_in_words) rows.push(['Amount in Words', t.amount_in_words]);
-
-      const csvContent = '\uFEFF' + rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+      const csvContent = '\uFEFF' + [Utils.invoiceExportHeaders(), exportCells()].map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = filename;
+      a.download = `${exportBaseName()}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+
+    $('export-json-btn').addEventListener('click', () => {
+      if (!currentStructuredData) return;
+      const blob = new Blob([JSON.stringify(currentStructuredData, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${exportBaseName()}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    $('export-xlsx-btn').addEventListener('click', async () => {
+      if (!currentStructuredData) return;
+      const button = $('export-xlsx-btn');
+      button.disabled = true;
+      message('Preparing your Excel file…');
+      try {
+        const XLSX = await guarded(loadXLSX(), 'Loading Excel tools', 30000);
+        const sheet = XLSX.utils.aoa_to_sheet([Utils.invoiceExportHeaders(), exportCells()]);
+        sheet['!cols'] = [{ wch: 22 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 14 }, { wch: 40 }, { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 24 }, { wch: 46 }];
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, 'Invoice');
+        XLSX.writeFile(workbook, `${exportBaseName()}.xlsx`);
+        message('Excel file saved. Product cells hold one item per line — turn on Wrap Text in Excel to read them easily.');
+      } catch (error) {
+        message(`Could not create the Excel file: ${error.message}`, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    function exportBaseName() {
+      const doc = currentDocument();
+      return `${doc ? doc.file.name.replace(/\.[^.]+$/, '') : 'invoice'}-invoice`;
     }
+
+    function exportCells() {
+      return Utils.invoiceExportRow(currentStructuredData, currentMatches);
+    }
+
+    updateCatalogUI();
   </script>
 </body>
 </html>

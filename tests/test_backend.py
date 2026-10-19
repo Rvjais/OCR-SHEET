@@ -2,12 +2,13 @@ from io import BytesIO
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from backend.app import create_app
+from backend.deepseek import NOT_FOUND, normalize_invoice
 from backend.ocr import OCRService, normalize_prediction
 
 
@@ -67,6 +68,22 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(self.service.calls, [])
         self.assertNotIn('api_key', self.client.get('/openapi.json').text)
+
+    def test_structure_invoice_returns_the_fixed_schema_with_not_found(self):
+        parsed = normalize_invoice({'store': {'name': 'Sharma Traders'}, 'items': [{'description': 'Zinc Syrup', 'rate': '98'}]})
+        with patch('backend.app.parse_invoice_with_deepseek', new=AsyncMock(return_value=parsed)):
+            response = self.client.post('/api/structure-invoice', json={'text': 'Sharma Traders\nZinc Syrup 98'})
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertEqual(result['store']['name'], 'Sharma Traders')
+        self.assertEqual(result['store']['state'], NOT_FOUND)
+        self.assertEqual(result['customer']['mobile'], NOT_FOUND)
+        self.assertEqual(result['items'][0]['rate'], 98.0)
+        self.assertEqual(result['payable'], {'amount': NOT_FOUND, 'account': NOT_FOUND})
+
+    def test_structure_invoice_rejects_empty_text(self):
+        response = self.client.post('/api/structure-invoice', json={'text': '   '})
+        self.assertEqual(response.status_code, 400)
 
     def test_missing_installed_models_fail_before_any_model_download(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'OCR_MODEL_DIR': folder}):

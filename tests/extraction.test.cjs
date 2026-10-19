@@ -101,3 +101,99 @@ test('long printed keys cannot erase a short pen-written value after a fuzzy mat
   const result = U.mergeHybrid('Total invoice amount inclusive of tax:', 'TotaI invoice amount inclusive of tax: 5');
   assert.match(result.text, /tax: 5/);
 });
+
+test('product list parsing reads quoted CSV, detects columns and prices', () => {
+  const rows = U.parseDelimitedRows('Product Name,Price\n"Amoxycillin 500, DT",45.5\nZinc Syrup,₹98\n\n');
+  assert.equal(rows.length, 3);
+  const detected = U.detectCatalogTable(rows);
+  assert.equal(detected.headerRow, 0);
+  assert.equal(detected.nameColumn, 0);
+  assert.equal(detected.priceColumn, 1);
+  assert.deepEqual(U.catalogFromMatrix(rows, detected), [
+    { name: 'Amoxycillin 500, DT', price: 45.5 },
+    { name: 'Zinc Syrup', price: 98 }
+  ]);
+});
+
+test('column detection prefers a product name header over an item code', () => {
+  const detected = U.detectCatalogColumns(['Item Code', 'Product Name', 'Rate (₹)']);
+  assert.equal(detected.nameColumn, 1);
+  assert.equal(detected.priceColumn, 2);
+});
+
+test('product matching corrects handwriting typos to the list spelling', () => {
+  const match = U.matchInvoice({ items: [{ description: 'Amoxycilln 500 mg', quantity: 1, rate: 45.5, amount: 45.5 }] }, [{ name: 'Amoxycillin 500 MG', price: 45.5 }]);
+  assert.equal(match.items[0].matchStatus, 'matched');
+  assert.equal(match.items[0].matchedName, 'Amoxycillin 500 MG');
+  assert.equal(match.verified, true);
+});
+
+test('product matching understands OCR letter and digit swaps', () => {
+  const match = U.matchInvoice({ items: [{ description: 'Paracetam0l 5OO', quantity: 1, rate: 20, amount: 20 }] }, [{ name: 'Paracetamol 500 MG', price: 20 }]);
+  assert.equal(match.items[0].matchStatus, 'matched');
+});
+
+test('strict price check flags a one-paisa difference and uses qty when rate is missing', () => {
+  const catalog = [{ name: 'Zinc Syrup', price: 98 }];
+  const mismatch = U.matchInvoice({ items: [{ description: 'Zinc Syrup', quantity: 2, rate: 'Not found', amount: 196.02 }] }, catalog);
+  assert.equal(mismatch.items[0].matchStatus, 'price-mismatch');
+  assert.match(mismatch.items[0].note, /196\.02|98\.01/);
+  const same = U.matchInvoice({ items: [{ description: 'Zinc Syrup', quantity: 2, rate: 'Not found', amount: 196 }] }, catalog);
+  assert.equal(same.items[0].matchStatus, 'matched');
+});
+
+test('missing rates and unknown products are flagged for manual verification', () => {
+  const catalog = [{ name: 'Zinc Syrup', price: 98 }];
+  const missing = U.matchInvoice({ items: [{ description: 'Zinc Syrup', quantity: 1, rate: 'Not found', amount: 'Not found' }] }, catalog);
+  assert.equal(missing.items[0].matchStatus, 'verify');
+  assert.equal(missing.verified, false);
+  const unknown = U.matchInvoice({ items: [{ description: 'Kesh King Oil 200ml', quantity: 1, rate: 210, amount: 210 }] }, catalog);
+  assert.equal(unknown.items[0].matchStatus, 'not-matched');
+  assert.equal(unknown.items[0].matchedName, 'Not found');
+});
+
+test('without a product list nothing is claimed as verified', () => {
+  const match = U.matchInvoice({ items: [{ description: 'Anything' }] }, []);
+  assert.equal(match.hasCatalog, false);
+  assert.equal(match.items[0].matchStatus, 'no-list');
+  const row = U.invoiceExportRow({ items: [{ description: 'Anything' }] }, match);
+  assert.match(row[12], /No product list/);
+});
+
+test('export rows carry Not found for missing fields and list items to verify', () => {
+  const invoice = {
+    store: { name: 'Sharma Traders', address: '12 MG Road, Pune, Maharashtra', state: 'Maharashtra' },
+    invoice: { number: 'INV-001' },
+    customer: { name: 'Ravi', mobile: 'Not found' },
+    items: [
+      { description: 'Zinc Syrup', quantity: 2, rate: 98, amount: 196, gst_rate: '12%', gst_amount: 23.52 },
+      { description: 'Kesh King Oil 200ml', quantity: 1, rate: 210, amount: 210, gst_rate: 'Not found', gst_amount: 'Not found' }
+    ],
+    gst: { rate: '12%', amount: 23.52, cgst: '11.76', sgst: '11.76', igst: 'Not found' },
+    payable: { amount: 429.52, account: 'Credit' }
+  };
+  const match = U.matchInvoice(invoice, [{ name: 'Zinc Syrup', price: 98 }]);
+  const row = U.invoiceExportRow(invoice, match);
+  assert.equal(row.length, U.invoiceExportHeaders().length);
+  assert.equal(row[2], 'Maharashtra');
+  assert.equal(row[5], 'Not found');
+  assert.equal(row[6], 'Zinc Syrup\nKesh King Oil 200ml');
+  assert.equal(row[7], '2\n1');
+  assert.equal(row[8], '98\n210');
+  assert.equal(row[9], '12% (23.52)\nNot found');
+  assert.equal(row[10], '429.52');
+  assert.equal(row[11], 'Credit');
+  assert.match(row[12], /need manual check/);
+  assert.match(row[13], /Kesh King Oil 200ml/);
+});
+
+test('export fills the GST column from the invoice summary when lines have none', () => {
+  const invoice = {
+    items: [{ description: 'Zinc Syrup', quantity: 1, rate: 98, amount: 98 }],
+    gst: { rate: '12%', amount: 11.76, cgst: 'Not found', sgst: 'Not found', igst: 'Not found' },
+    payable: { amount: 109.76, account: 'Not found' }
+  };
+  const row = U.invoiceExportRow(invoice, U.matchInvoice(invoice, []));
+  assert.equal(row[9], '12% | Total 11.76');
+  assert.equal(row[11], 'Not found');
+});
