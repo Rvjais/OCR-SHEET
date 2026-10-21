@@ -21,6 +21,17 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     assert.match(await page.locator('#catalog-status').textContent(), /3 products loaded from products\.csv/);
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('textlens.catalog.v2')).products.length), 3);
 
+    // An uploaded list is viewable with all of its columns, and Escape closes the sheet.
+    await page.locator('#catalog-view-nav').click();
+    await page.locator('#catalog-modal').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#catalog-modal-meta').textContent(), /products\.csv · Uploaded in this browser/);
+    assert.equal(await page.locator('#catalog-sheet-body tr').count(), 3);
+    assert.match(await page.locator('#catalog-sheet-head').textContent(), /Stock/);
+    assert.match(await page.locator('#catalog-sheet-body').textContent(), /₹45\.50/);
+    await page.keyboard.press('Escape');
+    await page.locator('#catalog-modal').waitFor({ state: 'hidden' });
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'catalog-view-nav', 'focus returns to the view button');
+
     await page.evaluate(() => {
       currentStructuredData = {
         store: { name: 'Sharma Traders', address: '12 MG Road, Pune', state: 'Maharashtra' },
@@ -107,6 +118,23 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     assert.equal(bundled.wrongPrice.matchStatus, 'price-mismatch');
     assert.match(await page.locator('#verification-banner').textContent(), /need manual verification/);
     assert.match(await page.evaluate(() => Utils.invoiceExportRow(currentStructuredData, currentMatches)[12]), /need manual check/);
+
+    // The bundled price sheet is viewable, searchable, and closable from the UI.
+    await page.locator('#catalog-view-nav').click();
+    await page.locator('#catalog-modal').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#catalog-modal-title').textContent(), /Product price sheet/);
+    assert.match(await page.locator('#catalog-modal-meta').textContent(), /product-catalog\.xlsx/);
+    assert.ok(await page.locator('#catalog-sheet-body tr').count() >= 80, 'the sheet view lists every product row');
+    assert.match(await page.locator('#catalog-sheet-body').textContent(), /Instax Mini 12 Camera/);
+    assert.match(await page.locator('#catalog-sheet-body').textContent(), /₹6,999/);
+    await page.locator('#catalog-search-input').fill('Silver');
+    assert.equal(await page.locator('#catalog-sheet-body tr').count(), 2, 'search filters the sheet rows');
+    assert.match(await page.locator('#catalog-modal-count').textContent(), /2 of \d+ rows/);
+    await page.locator('#catalog-search-input').fill('₹6,999');
+    assert.equal(await page.locator('#catalog-sheet-body tr').count(), 2, 'search matches the formatted price');
+    await page.locator('#catalog-modal-close').click();
+    await page.locator('#catalog-modal').waitFor({ state: 'hidden' });
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'catalog-view-nav', 'focus returns to the view button');
 
     // After an upload is removed, the bundled sheet must guide the next
     // formatting request just like an uploaded list did.

@@ -155,6 +155,40 @@
     .catalog-columns { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .catalog-columns label { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #5b7064; }
     .catalog-columns select { width: auto; min-width: 170px; min-height: 36px; padding: 6px 8px; font-size: 12px; }
+    .nav-actions { display: flex; align-items: center; gap: 10px; }
+    .nav-catalog { min-height: 38px; }
+    .catalog-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .catalog-modal-backdrop { position: absolute; inset: 0; background: rgba(20, 38, 29, .46); }
+    .catalog-modal-card { position: relative; display: flex; flex-direction: column; width: min(1120px, 100%); max-height: min(84vh, 780px); overflow: hidden; background: #fff; border: 1px solid #dfe7e2; border-radius: 14px; box-shadow: 0 24px 70px rgba(22, 45, 32, .28); }
+    .catalog-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid #e6ece8; }
+    .catalog-modal-head h2 { font-size: 17px; }
+    .catalog-modal-meta { margin: 5px 0 0; color: #6d8073; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+    .catalog-modal-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; padding: 11px 20px; border-bottom: 1px solid #eef2ef; }
+    .catalog-search { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; padding: 0 10px; border: 1px solid #d7e2db; border-radius: 8px; background: #fff; }
+    .catalog-search svg { width: 16px; height: 16px; color: #6d8073; }
+    .catalog-search input { width: 100%; min-height: 38px; border: 0; outline: 0; background: transparent; color: #30483a; font-size: 13px; }
+    .catalog-modal-count { color: #6d8073; font-size: 12px; }
+    .catalog-modal-body { flex: 1; overflow: auto; }
+    .catalog-sheet { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+    .catalog-sheet th { position: sticky; top: 0; z-index: 1; padding: 10px 14px; background: #eef4f0; border-bottom: 1px solid #dce6e0; color: #32513f; font-weight: 650; white-space: nowrap; }
+    .catalog-sheet td { padding: 9px 14px; border-bottom: 1px solid #eef2ef; color: #2e4437; vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+    .catalog-sheet td.sheet-price-cell { white-space: nowrap; }
+    .catalog-sheet tr:hover td { background: #fbfdfc; }
+    .catalog-sheet .sheet-price-cell { text-align: right; font-variant-numeric: tabular-nums; }
+    .catalog-sheet .sheet-price { color: #1e6b4a; font-weight: 600; }
+    .catalog-sheet a { color: #1f5faf; text-decoration: none; }
+    .catalog-sheet a:hover { text-decoration: underline; }
+    .catalog-sheet .sheet-url { display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+    .catalog-sheet-empty { margin: 0; padding: 32px 20px; color: #6d8073; font-size: 13px; text-align: center; }
+    @media (max-width: 700px) {
+      .nav-catalog span { display: none; }
+      .nav-catalog { padding: 9px; }
+      .catalog-modal { padding: 10px; }
+      .catalog-modal-card { max-height: 92vh; }
+      .catalog-modal-head { padding: 14px; }
+      .catalog-modal-tools { padding: 10px 14px; }
+      .catalog-sheet th, .catalog-sheet td { padding: 8px 10px; }
+    }
     .verification-banner { margin-bottom: 18px; padding: 12px 15px; border-radius: 9px; font-size: 13px; line-height: 1.6; border: 1px solid #f0d9b0; background: #fdf6e8; color: #7a5410; }
     .verification-banner.ok { border-color: #cfe6d5; background: #eef8f1; color: #1e6b4a; }
     .verification-banner ul { margin: 8px 0 0; padding-left: 18px; }
@@ -180,8 +214,10 @@
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H5a1 1 0 0 0-1 1v18a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8l-6-6Zm0 0v6h6M8 13h8M8 17h5"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 6v1"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 4v16M15 4v16"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
   </svg>
-  <header><div class="nav"><div class="brand"><span class="brand-icon"><svg aria-hidden="true"><use href="#i-scan"/></svg></span>TextLens</div></div></header>
+  <header><div class="nav"><div class="brand"><span class="brand-icon"><svg aria-hidden="true"><use href="#i-scan"/></svg></span>TextLens</div><div class="nav-actions"><button type="button" class="secondary nav-catalog" id="catalog-view-nav" aria-label="View price sheet" aria-haspopup="dialog" aria-controls="catalog-modal" title="View price sheet" disabled><svg aria-hidden="true"><use href="#i-table"/></svg><span>View price sheet</span></button></div></div></header>
   <main>
     <h1>Image or PDF to text</h1>
     <p class="intro">Upload images and PDFs together. Get text organized by file and page.</p>
@@ -256,6 +292,7 @@
         <div class="catalog-row">
           <button type="button" class="secondary" id="catalog-choose"><svg aria-hidden="true"><use href="#i-upload"/></svg><span id="catalog-choose-label">Upload product list</span></button>
           <span class="catalog-status" id="catalog-status">Loading the bundled product list…</span>
+          <button type="button" class="secondary" id="catalog-view" aria-haspopup="dialog" aria-controls="catalog-modal" title="View price sheet" disabled><svg aria-hidden="true"><use href="#i-table"/></svg><span>View sheet</span></button>
           <button type="button" class="icon-button" id="catalog-clear" aria-label="Remove uploaded list and reload the bundled sheet" title="Remove uploaded list and reload the bundled sheet" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
         </div>
         <div class="catalog-columns" id="catalog-columns" hidden>
@@ -289,6 +326,32 @@
     </section>
     <footer>For best results, use a clear image and select its text language.</footer>
   </main>
+  <div class="catalog-modal" id="catalog-modal" hidden>
+    <div class="catalog-modal-backdrop" id="catalog-modal-backdrop"></div>
+    <div class="catalog-modal-card" role="dialog" aria-modal="true" aria-labelledby="catalog-modal-title">
+      <div class="catalog-modal-head">
+        <div>
+          <h2 id="catalog-modal-title"><svg aria-hidden="true"><use href="#i-table"/></svg>Product price sheet</h2>
+          <p class="catalog-modal-meta" id="catalog-modal-meta"></p>
+        </div>
+        <button type="button" class="icon-button" id="catalog-modal-close" aria-label="Close price sheet" title="Close price sheet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+      </div>
+      <div class="catalog-modal-tools">
+        <label class="catalog-search">
+          <svg aria-hidden="true"><use href="#i-search"/></svg>
+          <input type="search" id="catalog-search-input" placeholder="Search product, SKU, price…" aria-label="Search price sheet" autocomplete="off">
+        </label>
+        <span class="catalog-modal-count" id="catalog-modal-count" aria-live="polite"></span>
+      </div>
+      <div class="catalog-modal-body">
+        <table class="catalog-sheet" aria-label="Product price sheet">
+          <thead><tr id="catalog-sheet-head"></tr></thead>
+          <tbody id="catalog-sheet-body"></tbody>
+        </table>
+        <p class="catalog-sheet-empty" id="catalog-sheet-empty" hidden></p>
+      </div>
+    </div>
+  </div>
   <script src="extraction-utils.js"></script>
   <script src="runtime-config.js"></script>
   <script>
@@ -1202,6 +1265,9 @@
     let productCatalog = [];
     let catalogMeta = null;
     let catalogMatrix = null;
+    let catalogSheet = null;
+    let catalogModalOpener = null;
+    let catalogModalBodyOverflow = '';
     let xlsxPromise = null;
     let catalogEpoch = 0;
     let bundledCatalogPromise = null;
@@ -1290,6 +1356,12 @@
     function updateCatalogUI() {
       $('catalog-clear').hidden = !productCatalog.length || catalogMeta?.source === 'bundled';
       $('catalog-choose-label').textContent = productCatalog.length ? 'Replace product list' : 'Upload product list';
+      const canView = productCatalog.length > 0 || (Array.isArray(catalogMatrix) && catalogMatrix.length > 0);
+      $('catalog-view-nav').disabled = !canView;
+      $('catalog-view').disabled = !canView;
+      const viewTitle = canView ? `View ${catalogMeta?.fileName || 'product price sheet'}` : 'Loading the product list…';
+      $('catalog-view-nav').title = viewTitle;
+      $('catalog-view').title = viewTitle;
       const columns = $('catalog-columns');
       if (catalogMeta && Array.isArray(catalogMatrix) && catalogMeta.source !== 'bundled') {
         columns.hidden = false;
@@ -1374,6 +1446,121 @@
       renderStructuredTable(currentStructuredData, currentMatches);
     }
 
+    function buildCatalogSheet() {
+      let headers, rows, priceIndex;
+      if (Array.isArray(catalogMatrix) && catalogMatrix.length) {
+        const headerRow = Math.max(0, Math.min(Number(catalogMeta?.headerRow) || 0, catalogMatrix.length - 1));
+        headers = (catalogMatrix[headerRow] || []).map((cell, index) => String(cell ?? '').trim() || `Column ${index + 1}`);
+        rows = catalogMatrix.slice(headerRow + 1).filter(row => Array.isArray(row) && row.some(cell => String(cell ?? '').trim()));
+        priceIndex = Number.isInteger(catalogMeta?.priceColumn) ? catalogMeta.priceColumn : -1;
+      } else {
+        headers = ['Product Name', 'Price (INR)'];
+        rows = productCatalog.map(product => [product.name, product.price]);
+        priceIndex = 1;
+      }
+      let width = headers.length;
+      for (const row of rows) width = Math.max(width, row.length);
+      while (headers.length < width) headers.push(`Column ${headers.length + 1}`);
+      return { headers, rows, priceIndex };
+    }
+
+    function catalogCellMarkup(value, index, priceIndex) {
+      if (value === null || value === undefined) return '';
+      const raw = String(value);
+      if (!raw.trim()) return '';
+      if (index === priceIndex) {
+        const amount = typeof value === 'number' ? value : Utils.parseAmount(value);
+        if (amount !== null && Number.isFinite(amount)) {
+          const decimals = Number.isInteger(amount) ? 0 : 2;
+          return `<span class="sheet-price">₹${amount.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: 2 })}</span>`;
+        }
+      }
+      if (/^https?:\/\//i.test(raw.trim())) {
+        const url = raw.trim();
+        return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(url)}" class="sheet-url">${escapeHtml(url)}</a>`;
+      }
+      return escapeHtml(raw);
+    }
+
+    function renderCatalogSheetHeader() {
+      const head = $('catalog-sheet-head');
+      head.replaceChildren(...catalogSheet.headers.map((header, index) => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        if (index === catalogSheet.priceIndex) th.classList.add('sheet-price-cell');
+        return th;
+      }));
+    }
+
+    function catalogRowSearchText(row) {
+      return row.map((cell, index) => {
+        const raw = String(cell ?? '');
+        if (index !== catalogSheet.priceIndex) return raw;
+        const amount = typeof cell === 'number' ? cell : Utils.parseAmount(cell);
+        return amount !== null && Number.isFinite(amount) ? `${raw} ₹${amount.toLocaleString('en-IN')} ${amount}` : raw;
+      }).join(' ').toLocaleLowerCase();
+    }
+
+    function renderCatalogSheet() {
+      if (!catalogSheet) return;
+      const query = $('catalog-search-input').value.trim().toLocaleLowerCase();
+      const matches = query
+        ? catalogSheet.rows.filter(row => catalogRowSearchText(row).includes(query))
+        : catalogSheet.rows;
+      const visible = matches.slice(0, 1000);
+      const fragment = document.createDocumentFragment();
+      for (const row of visible) {
+        const tr = document.createElement('tr');
+        catalogSheet.headers.forEach((_, index) => {
+          const td = document.createElement('td');
+          td.innerHTML = catalogCellMarkup(row[index], index, catalogSheet.priceIndex);
+          if (index === catalogSheet.priceIndex) td.classList.add('sheet-price-cell');
+          tr.append(td);
+        });
+        fragment.append(tr);
+      }
+      $('catalog-sheet-body').replaceChildren(fragment);
+      const empty = $('catalog-sheet-empty');
+      empty.hidden = matches.length > 0;
+      empty.textContent = query ? 'No products match that search.' : 'This product list has no data rows.';
+      const total = catalogSheet.rows.length;
+      let count = query ? `${matches.length.toLocaleString()} of ${total.toLocaleString()} rows` : `${total.toLocaleString()} rows`;
+      if (matches.length > visible.length) count += ` · showing first ${visible.length.toLocaleString()}`;
+      $('catalog-modal-count').textContent = count;
+    }
+
+    async function openCatalogSheet(opener) {
+      if (!productCatalog.length && !catalogMatrix && !bundledCatalogFailed) await loadBundledCatalog();
+      const available = productCatalog.length > 0 || (Array.isArray(catalogMatrix) && catalogMatrix.length > 0);
+      if (!available) {
+        catalogStatus('No product list is loaded yet. Upload an Excel/CSV list or check the bundled sheet.', true);
+        return;
+      }
+      catalogSheet = buildCatalogSheet();
+      renderCatalogSheetHeader();
+      $('catalog-search-input').value = '';
+      renderCatalogSheet();
+      const fileName = catalogMeta?.fileName || 'Product list';
+      const sourceText = catalogMeta?.source === 'bundled' ? 'Bundled with the app' : catalogMeta?.source === 'upload' ? 'Uploaded in this browser' : 'Current product list';
+      $('catalog-modal-meta').textContent = `${fileName} · ${sourceText}`;
+      catalogModalOpener = opener || document.activeElement;
+      catalogModalBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      $('catalog-modal').hidden = false;
+      $('catalog-search-input').focus();
+    }
+
+    function closeCatalogSheet() {
+      if ($('catalog-modal').hidden) return;
+      $('catalog-modal').hidden = true;
+      document.body.style.overflow = catalogModalBodyOverflow;
+      $('catalog-search-input').value = '';
+      catalogSheet = null;
+      const opener = catalogModalOpener;
+      catalogModalOpener = null;
+      opener?.focus?.();
+    }
+
     $('catalog-choose').addEventListener('click', () => $('catalog-input').click());
     $('catalog-input').addEventListener('change', (event) => {
       const file = event.target.files[0];
@@ -1391,6 +1578,24 @@
     });
     $('catalog-name-column').addEventListener('change', applyCatalogColumns);
     $('catalog-price-column').addEventListener('change', applyCatalogColumns);
+    $('catalog-view-nav').addEventListener('click', event => openCatalogSheet(event.currentTarget));
+    $('catalog-view').addEventListener('click', event => openCatalogSheet(event.currentTarget));
+    $('catalog-modal-close').addEventListener('click', closeCatalogSheet);
+    $('catalog-modal-backdrop').addEventListener('click', closeCatalogSheet);
+    $('catalog-search-input').addEventListener('input', renderCatalogSheet);
+    $('catalog-modal').addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeCatalogSheet();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...$('catalog-modal').querySelectorAll('button, input, a[href]')].filter(element => !element.disabled && element.getClientRects().length);
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
 
     $('close-table-btn').addEventListener('click', () => {
       $('structured-panel').hidden = true;
