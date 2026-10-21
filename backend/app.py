@@ -114,6 +114,13 @@ def create_app(service=None):
     async def runtime_config():
         return FileResponse(ROOT / 'runtime-config.js', media_type='application/javascript')
 
+    @app.get('/product-catalog.xlsx')
+    async def product_catalog():
+        return FileResponse(
+            ROOT / 'product-catalog.xlsx',
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+
     @app.get('/api/health')
     async def health():
         return {'status': 'ok', 'service': 'textlens-handwriting', **service.health(),
@@ -154,10 +161,13 @@ def create_app(service=None):
             raise HTTPException(400, 'Invalid JSON request.')
         text = str(body.get('text', '')).strip()
         api_key = str(body.get('api_key', '')).strip() or None
+        products = body.get('products')
+        if not isinstance(products, list):
+            products = None
         if not text:
             raise HTTPException(400, 'No invoice text provided.')
         try:
-            return await parse_invoice_with_deepseek(text, api_key=api_key)
+            return await parse_invoice_with_deepseek(text, api_key=api_key, products=products)
         except ValueError as err:
             raise HTTPException(400, str(err))
         except Exception as err:

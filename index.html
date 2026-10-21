@@ -255,8 +255,8 @@
         <input type="file" id="catalog-input" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden>
         <div class="catalog-row">
           <button type="button" class="secondary" id="catalog-choose"><svg aria-hidden="true"><use href="#i-upload"/></svg><span id="catalog-choose-label">Upload product list</span></button>
-          <span class="catalog-status" id="catalog-status">No product list loaded. Upload your Excel or CSV (product name + price) to verify scanned products and rates.</span>
-          <button type="button" class="icon-button" id="catalog-clear" aria-label="Remove product list" title="Remove product list" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+          <span class="catalog-status" id="catalog-status">Loading the bundled product list…</span>
+          <button type="button" class="icon-button" id="catalog-clear" aria-label="Remove uploaded list and reload the bundled sheet" title="Remove uploaded list and reload the bundled sheet" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
         </div>
         <div class="catalog-columns" id="catalog-columns" hidden>
           <label>Product column <select id="catalog-name-column"></select></label>
@@ -498,6 +498,18 @@
         Promise.resolve(promise).then(value => finish(resolve, value), error => finish(reject, error instanceof Error ? error : new Error(String(error))));
         if (signal?.aborted) { abort(); return; }
         signal?.addEventListener('abort', abort, { once: true });
+      });
+    }
+
+    // Catalog files are independent of OCR; do not tie them to the extraction
+    // abort signal, or cancelling OCR would also cancel loading the price list.
+    function withTimeout(promise, label, milliseconds = 30000) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`${label} timed out.`)), milliseconds);
+        Promise.resolve(promise).then(
+          value => { clearTimeout(timer); resolve(value); },
+          error => { clearTimeout(timer); reject(error instanceof Error ? error : new Error(String(error))); }
+        );
       });
     }
 
@@ -1191,15 +1203,24 @@
     let catalogMeta = null;
     let catalogMatrix = null;
     let xlsxPromise = null;
-    const CATALOG_KEY = 'textlens.catalog.v1';
+    let catalogEpoch = 0;
+    let bundledCatalogPromise = null;
+    let bundledCatalogFailed = false;
+    const CATALOG_KEY = 'textlens.catalog.v2';
+    const LEGACY_CATALOG_KEY = 'textlens.catalog.v1';
+    const BUNDLED_CATALOG_FILE = 'product-catalog.xlsx';
     const XLSX_BASE = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/';
-    const CATALOG_DEFAULT_STATUS = 'No product list loaded. Upload your Excel or CSV (product name + price) to verify scanned products and rates.';
+    const CATALOG_DEFAULT_STATUS = 'Loading the bundled product list…';
+
+    // The bundled sheet is the new default; uploads saved by the previous
+    // version used v1, so they are retired once instead of overriding it.
+    try { localStorage.removeItem(LEGACY_CATALOG_KEY); } catch { /* ignore */ }
 
     try {
       const savedCatalog = JSON.parse(localStorage.getItem(CATALOG_KEY) || 'null');
       if (Array.isArray(savedCatalog?.products) && savedCatalog.products.length) {
         productCatalog = savedCatalog.products.map(pair => ({ name: String(pair?.[0] ?? '').trim(), price: typeof pair?.[1] === 'number' ? pair[1] : Utils.parseAmount(pair?.[1]) })).filter(product => product.name);
-        catalogMeta = { fileName: String(savedCatalog.fileName || ''), updated: String(savedCatalog.updated || ''), headerRow: 0, nameColumn: 0, priceColumn: -1 };
+        catalogMeta = { fileName: String(savedCatalog.fileName || ''), updated: String(savedCatalog.updated || ''), headerRow: 0, nameColumn: 0, priceColumn: -1, source: 'upload' };
       }
     } catch { /* a corrupted saved list is ignored */ }
 
@@ -1228,16 +1249,49 @@
       } catch { /* a list too large to persist stays in memory for this session */ }
     }
 
+    function loadBundledCatalog({ retry = false } = {}) {
+      if (productCatalog.length) return Promise.resolve();
+      if (bundledCatalogPromise && !retry) return bundledCatalogPromise;
+      if (bundledCatalogFailed && !retry) return Promise.resolve();
+      const epoch = ++catalogEpoch;
+      bundledCatalogFailed = false;
+      catalogStatus(`Loading ${BUNDLED_CATALOG_FILE}…`);
+      const run = (async () => {
+        try {
+          const XLSX = await withTimeout(loadXLSX(), 'Loading Excel tools', 30000);
+          const response = await withTimeout(fetch(`${BUNDLED_CATALOG_FILE}?v=${Date.now()}`, { cache: 'no-store' }), 'Loading the bundled product list', 30000);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          if (!sheet) throw new Error('The workbook has no sheets.');
+          const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+          if (epoch !== catalogEpoch || productCatalog.length) return;
+          if (!Array.isArray(matrix) || !matrix.length) throw new Error('The sheet is empty.');
+          applyCatalogMatrix(matrix, BUNDLED_CATALOG_FILE, { source: 'bundled' });
+        } catch (error) {
+          if (epoch === catalogEpoch && !productCatalog.length) {
+            bundledCatalogFailed = true;
+            catalogStatus(`Bundled product list unavailable (${error.message}). Upload your own Excel/CSV list to verify prices.`, true);
+          }
+        }
+      })();
+      bundledCatalogPromise = run;
+      run.finally(() => {
+        if (bundledCatalogPromise === run) bundledCatalogPromise = null;
+      });
+      return run;
+    }
+
     function catalogStatus(text, warn = false) {
       $('catalog-status').textContent = text;
       $('catalog-status').classList.toggle('warn', warn);
     }
 
     function updateCatalogUI() {
-      $('catalog-clear').hidden = !productCatalog.length;
+      $('catalog-clear').hidden = !productCatalog.length || catalogMeta?.source === 'bundled';
       $('catalog-choose-label').textContent = productCatalog.length ? 'Replace product list' : 'Upload product list';
       const columns = $('catalog-columns');
-      if (catalogMeta && Array.isArray(catalogMatrix)) {
+      if (catalogMeta && Array.isArray(catalogMatrix) && catalogMeta.source !== 'bundled') {
         columns.hidden = false;
         const headers = catalogMatrix[catalogMeta.headerRow] || [];
         const width = Math.max(headers.length, ...catalogMatrix.slice(0, 20).map(row => (Array.isArray(row) ? row.length : 0)));
@@ -1253,8 +1307,12 @@
         priceSelect.value = String(catalogMeta.priceColumn);
       } else columns.hidden = true;
       if (productCatalog.length) {
-        const updated = catalogMeta?.updated ? ` Uploaded ${new Date(catalogMeta.updated).toLocaleDateString()}.` : '';
-        $('catalog-status').innerHTML = `<strong>${productCatalog.length.toLocaleString()}</strong> products loaded${catalogMeta?.fileName ? ` from ${escapeHtml(catalogMeta.fileName)}` : ''}.${updated}`;
+        const bundled = catalogMeta?.source === 'bundled';
+        const updated = !bundled && catalogMeta?.updated ? ` Uploaded ${new Date(catalogMeta.updated).toLocaleDateString()}.` : '';
+        const hint = bundled
+          ? 'Edit this sheet in Excel to update names or prices — used to guide extraction and verify rates.'
+          : 'Used to guide extraction and verify rates.';
+        $('catalog-status').innerHTML = `<strong>${productCatalog.length.toLocaleString()}</strong> products loaded${catalogMeta?.fileName ? ` from ${escapeHtml(catalogMeta.fileName)}` : ''}.${updated} ${hint}`;
         $('catalog-status').classList.remove('warn');
       } else catalogStatus(CATALOG_DEFAULT_STATUS);
     }
@@ -1264,12 +1322,12 @@
       try {
         let matrix;
         if (/\.xlsx?$/i.test(file.name)) {
-          const XLSX = await guarded(loadXLSX(), 'Loading Excel tools', 30000);
-          const workbook = XLSX.read(await guarded(file.arrayBuffer(), 'Reading the product list'), { type: 'array' });
+          const XLSX = await withTimeout(loadXLSX(), 'Loading Excel tools', 30000);
+          const workbook = XLSX.read(await withTimeout(file.arrayBuffer(), 'Reading the product list'), { type: 'array' });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
         } else {
-          matrix = Utils.parseDelimitedRows(await guarded(file.text(), 'Reading the product list'));
+          matrix = Utils.parseDelimitedRows(await withTimeout(file.text(), 'Reading the product list'));
         }
         if (!Array.isArray(matrix) || !matrix.length) throw new Error('The file looks empty.');
         applyCatalogMatrix(matrix, file.name);
@@ -1278,7 +1336,8 @@
       }
     }
 
-    function applyCatalogMatrix(matrix, fileName) {
+    function applyCatalogMatrix(matrix, fileName, { source = 'upload' } = {}) {
+      catalogEpoch++;
       catalogMatrix = matrix;
       const detected = Utils.detectCatalogTable(matrix);
       catalogMeta = {
@@ -1286,7 +1345,8 @@
         updated: new Date().toISOString(),
         headerRow: detected.headerRow >= 0 ? detected.headerRow : 0,
         nameColumn: detected.nameColumn >= 0 ? detected.nameColumn : 0,
-        priceColumn: detected.priceColumn
+        priceColumn: detected.priceColumn,
+        source
       };
       rebuildCatalog();
     }
@@ -1294,7 +1354,7 @@
     function rebuildCatalog() {
       productCatalog = Utils.catalogFromMatrix(catalogMatrix, { headerRow: catalogMeta.headerRow, nameColumn: catalogMeta.nameColumn, priceColumn: catalogMeta.priceColumn });
       catalogMeta.updated = new Date().toISOString();
-      saveCatalog();
+      if (catalogMeta.source !== 'bundled') saveCatalog();
       updateCatalogUI();
       refreshMatches();
       if (!productCatalog.length) catalogStatus('No usable product rows were found — pick the correct columns below.', true);
@@ -1322,9 +1382,12 @@
     });
     $('catalog-clear').addEventListener('click', () => {
       productCatalog = []; catalogMeta = null; catalogMatrix = null;
+      catalogEpoch++;
+      bundledCatalogFailed = false;
       try { localStorage.removeItem(CATALOG_KEY); } catch { /* ignore */ }
       updateCatalogUI();
       refreshMatches();
+      loadBundledCatalog({ retry: true });
     });
     $('catalog-name-column').addEventListener('change', applyCatalogColumns);
     $('catalog-price-column').addEventListener('change', applyCatalogColumns);
@@ -1349,10 +1412,12 @@
           catch (e) { /* fallback */ }
         }
         const endpoint = `${backendURL || ''}/api/structure-invoice`;
+        if (!productCatalog.length && !bundledCatalogFailed) await loadBundledCatalog();
+        const hints = Utils.productHints(text, productCatalog, 250);
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text })
+          body: JSON.stringify({ text, products: hints })
         });
 
         const data = await res.json();
@@ -1365,7 +1430,7 @@
         renderStructuredTable(data, currentMatches);
         $('structured-panel').hidden = false;
         $('structured-panel').scrollIntoView({ behavior: 'smooth' });
-        message('Invoice successfully organized into table format.');
+        message(`Invoice successfully organized into table format.${hints.length ? ` Used ${hints.length} product reference${hints.length === 1 ? '' : 's'} from your list.` : ''}`);
       } catch (err) {
         message(`Structuring error: ${err.message}`, true);
       } finally {
@@ -1543,6 +1608,7 @@
     }
 
     updateCatalogUI();
+    if (!productCatalog.length) loadBundledCatalog();
   </script>
 </body>
 </html>

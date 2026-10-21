@@ -30,13 +30,15 @@ Live: `https://ocr-sheet-topaz.vercel.app` → Backend: `https://72-61-224-90.ss
 | ✍️ **Handwriting mode (local backend)** | PaddleOCR PP-OCRv5 reads full page PNG (2400px cap, 2x upscale), Devanagari/Latin support. | Reads handwritten totals, signatures, Hindi notes that normal OCR misses. |
 | 📑 **Hybrid selectable + handwritten** | Merges exact PDF text layer with OCR suffixes next to labels. | Printed invoice + pen-written phone/amount both captured — no manual re-type. |
 | 📊 **Confidence + review guidance** | Weighted score, `<85` flagged, `<80` word highlight, edit box with notes. | Spot errors in seconds — accountant checks only red words, not full page. |
-| 🧾 **Format to Table (DeepSeek)** | Converts raw text → store name/address/state, invoice no, customer name/mobile, line items (qty, rate, amount, GST), invoice GST, payable amount + account. Missing values become **Not found**. Exports JSON, CSV and real **.xlsx**. | Paste into Tally/Excel directly — one row per invoice, no blank cells to puzzle over. |
-| 🛒 **Product list verification** | Upload your Excel/CSV price list once (kept in your browser). Scanned names are fuzzy-matched (typos, letter/digit swaps) to your list; rates are cross-checked strictly. Anything unmatched, mismatched or missing a rate is **flagged for manual verification** with a reason list. | Handwriting errors get auto-corrected to real product names, and you only hand-check the rows the app explicitly lists. |
+| 🧾 **Format to Table (DeepSeek)** | Converts raw text → store name/address/state, invoice no, customer name/mobile, line items (qty, rate, amount, GST), invoice GST, payable amount + account. The bundled product sheet is loaded automatically, and its relevant rows are sent along so handwriting is read against real product names and prices. Missing values become **Not found**. Exports JSON, CSV and real **.xlsx**. | Paste into Tally/Excel directly — one row per invoice, no blank cells to puzzle over. |
+| 🛒 **Product list + price verification** | Ships with `product-catalog.xlsx` (83 Instax products, 87 price rows, extracted from the instax.in scrape). The app loads it on startup. Edit that sheet in Excel to add products or update prices, save, and reload. You can also upload another Excel/CSV list; the × button restores the bundled sheet. Scanned names are fuzzy-matched (typos, letter/digit swaps), rates are cross-checked strictly, and the printed rate breaks ties between similar variants. Anything unmatched, mismatched or missing a rate is **flagged for manual verification** with a reason list. | Fewer handwriting errors, and you only hand-check the rows the app explicitly lists. |
 | 💾 **Copy-all / Save-all** | Exports in upload order with filename/page headings + failed-page notices. | Client-ready text file, identical filenames kept separate — no confusion. |
 | 🌐 **5 languages** | `eng, eng+hin, eng+spa, eng+fra, eng+deu` toggle, fresh extraction on change. | Hindi bills + English + EU invoices in one tool. |
 | 🔒 **Privacy + limits** | In-memory decode, no logs, 20MB/20MP cap, 429 rate-limit, offline model preload. | Safe for Aadhaar/PAN scans — nothing stored, abuse blocked. |
 
 > **Perfect OCR cannot be guaranteed.** Review handwriting, dates, IDs and amounts against preview. Confidence is an engine estimate, not correctness probability.
+>
+> **Product list privacy:** the bundled `product-catalog.xlsx` is served from the same site and read in your browser; it is never uploaded. Because it is served with the app, anyone who can open a public deployment can download it — do not put confidential purchase costs in it. The list you upload yourself stays in your browser. When you click Format to Table, only the relevant product names and prices (a shortlist, not the whole file) are sent with the invoice text to the DeepSeek structuring endpoint — nothing is stored server-side.
 
 ## 🛠️ Tech Stack
 
@@ -54,6 +56,8 @@ Live: `https://ocr-sheet-topaz.vercel.app` → Backend: `https://72-61-224-90.ss
 ```
 OCR-SHEET/
 ├── index.html, extraction-utils.js, runtime-config.js
+├── product-catalog.xlsx (bundled product + price list)
+├── tools/ build_product_catalog.py (rebuild the sheet from a scrape)
 ├── server.py, backend/ app.py, ocr.py, deepseek.py, config.py, limits.py
 ├── models/ (git-ignored weights)
 ├── tests/ test_backend.py, extraction.test.cjs, browser*.cjs
@@ -66,8 +70,23 @@ OCR-SHEET/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/, /api/health` | UI + health |
+| `GET` | `/product-catalog.xlsx` | Bundled product + price sheet used for guidance/verification |
 | `POST` | `/api/ocr {file,language,provider=local}` | Handwriting OCR |
-| `POST` | `/api/structure-invoice {text}` | DeepSeek table |
+| `POST` | `/api/structure-invoice {text, products?}` | DeepSeek table (optional product/price list guides extraction) |
+
+## 🛒 Product Catalog
+
+`product-catalog.xlsx` ships with the app (83 Instax products, 87 price rows, built from the instax.in scrape). The **Products** sheet is the source of truth and the app loads it automatically on startup.
+
+- **Add or update products:** open the file in Excel, edit `Product Name` or `Price (INR)`, add new rows under the last product, save as `.xlsx`, then reload the app. Keep the headers unchanged — extra columns (SKU, Category, Variants, URL) are ignored by the app.
+- **Use a different list:** click **Replace product list** in the app to upload your own Excel/CSV. The × button removes that upload and reloads the bundled sheet.
+- **Rebuild the sheet from a scrape:**
+  ```powershell
+  .\.venv\Scripts\python.exe -m pip install openpyxl
+  .\.venv\Scripts\python.exe tools\build_product_catalog.py --source "C:\path\to\scraped_site\pages"
+  ```
+  Rebuilding overwrites manual edits, so use it only when refreshing the base data.
+- **Deployment:** the sheet must be deployed next to `index.html` (the Dockerfile copies it; a static host such as Vercel serves it automatically).
 
 ## 🚀 Getting Started
 

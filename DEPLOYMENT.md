@@ -127,7 +127,7 @@ The workflow tests the code, checks scripts, builds a non-root image, smoke-test
 
 Success requires a healthy container and an HTTPS health response containing `status: ok`, the expected commit, `available: true`, `loaded: true`, and `requires_access_token: false`. Startup has up to five minutes to initialize the local models. Failed pulls preserve the current release; failures after replacement restore the previous image. The shared `.env` and one-time proxy configuration are not rolled back. Container replacement can cause a brief interruption.
 
-The frontend's API address is in `runtime-config.js`. Vercel must deploy it with `index.html` and `extraction-utils.js`. Local development keeps local discovery.
+The frontend's API address is in `runtime-config.js`. Vercel must deploy it with `index.html`, `extraction-utils.js` and `product-catalog.xlsx`. The bundled sheet is fetched from the same site; after editing prices in `product-catalog.xlsx`, redeploy the frontend (or restart the local server) for the change to appear.
 
 ## Logs and rollback
 

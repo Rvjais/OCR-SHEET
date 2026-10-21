@@ -14,7 +14,7 @@ COPY backend/ ./backend/
 RUN python -m backend.download_models \
     && chmod -R a+rX /opt/textlens-models \
     && rm -rf /tmp/paddlex /tmp/textlens
-COPY index.html extraction-utils.js runtime-config.js ./
+COPY index.html extraction-utils.js runtime-config.js product-catalog.xlsx ./
 ARG APP_VERSION=development
 ENV APP_VERSION=$APP_VERSION
 USER 10001:10001

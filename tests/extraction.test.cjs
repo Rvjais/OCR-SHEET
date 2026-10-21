@@ -197,3 +197,30 @@ test('export fills the GST column from the invoice summary when lines have none'
   assert.equal(row[9], '12% | Total 11.76');
   assert.equal(row[11], 'Not found');
 });
+
+test('extraction hints shortlist a large catalog by names and printed prices', () => {
+  const catalog = [
+    { name: 'Zinc Syrup', price: 98 },
+    { name: 'Amoxycillin 500 MG', price: 45.5 }
+  ];
+  for (let index = 1; index <= 300; index++) catalog.push({ name: `Filler Product ${index}`, price: index + 0.25 });
+  const hints = U.productHints('Sharma Traders\nZ1nc Syrup 98\nAmoxycilln 500 mg 45.5', catalog, 20);
+  assert.deepEqual(hints.map(hint => hint.name).sort(), ['Amoxycillin 500 MG', 'Zinc Syrup']);
+  assert.equal(hints.find(hint => hint.name === 'Zinc Syrup').price, 98);
+});
+
+test('every product is hinted when the catalog is already small', () => {
+  assert.deepEqual(U.productHints('anything', [{ name: 'Soap', price: 10 }], 20), [{ name: 'Soap', price: 10 }]);
+  assert.deepEqual(U.productHints('anything', [], 20), []);
+});
+
+test('matching uses the printed rate to choose between similar variants', () => {
+  const catalog = [
+    { name: 'Amoxycillin 250 MG', price: 30 },
+    { name: 'Amoxycillin 500 MG', price: 45 }
+  ];
+  const match = U.matchInvoice({ items: [{ description: 'Amoxycillin', quantity: 1, rate: 45, amount: 45 }] }, catalog);
+  assert.equal(match.items[0].matchedName, 'Amoxycillin 500 MG');
+  assert.equal(match.items[0].matchStatus, 'matched');
+  assert.match(match.items[0].note, /printed rate/);
+});

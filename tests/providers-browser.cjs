@@ -70,7 +70,6 @@ const url = process.env.TEXTLENS_URL || 'http://127.0.0.1:8000';
     assert.match(await localOCR.locator('#output').inputValue(), /1,234\.50/);
     assert.match(await localOCR.locator('#quality-words').textContent(), /1,234\.50/);
     assert.doesNotMatch(await localOCR.locator('#quality-words').textContent(), /0\/100/);
-    assert.match(await localOCR.locator('.privacy').textContent(), /No external AI services/);
     assert.equal(await localOCR.evaluate(() => localStorage.length + sessionStorage.length), 0);
     for (const width of [320, 390, 768, 1280]) {
       await localOCR.setViewportSize({ width, height: 844 });

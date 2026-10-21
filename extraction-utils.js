@@ -342,6 +342,53 @@
     })).filter(product => product.name && product.key.norm);
   }
 
+  function productHints(text, products, limit = 250) {
+    const prepared = prepareCatalog(products);
+    const cap = Math.max(1, Number.isFinite(limit) ? limit : 250);
+    if (!prepared.length) return [];
+    if (prepared.length <= cap) return prepared.map(product => ({ name: product.name, price: product.price }));
+
+    // Large lists are shortlisted before they are sent to the extraction model:
+    // index products by token prefix and exact price, then score only the lines
+    // that can plausibly refer to them. Keeps the prompt small and relevant.
+    const byPrefix = new Map(), byPrice = new Map();
+    const index = (map, key, product) => {
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(product);
+    };
+    for (const product of prepared) {
+      for (const token of new Set(product.key.alphaTokens.map(confusionKey))) index(byPrefix, token.slice(0, 3), product);
+      if (Number.isFinite(product.price)) index(byPrice, Math.round(product.price * 100), product);
+    }
+
+    const chosen = new Map();
+    const add = (product, score) => {
+      const existing = chosen.get(product.name);
+      if (!existing || score > existing.score) chosen.set(product.name, { name: product.name, price: product.price, score });
+    };
+    const lines = cleanText(text).split('\n').filter(line => /[\p{L}]/u.test(line)).slice(0, 250);
+    for (const line of lines) {
+      const key = productKey(line);
+      if (!key.alphaTokens.length) continue;
+      const candidates = new Set();
+      for (const token of key.alphaTokens) for (const product of byPrefix.get(confusionKey(token).slice(0, 3)) || []) candidates.add(product);
+      const prices = [...line.matchAll(/\d+(?:[.,]\d{1,2})?/g)].map(match => parseAmount(match[0])).filter(value => value !== null);
+      for (const value of prices) for (const product of byPrice.get(Math.round(value * 100)) || []) candidates.add(product);
+      if (!candidates.size) continue;
+      const scored = [];
+      for (const product of candidates) {
+        let score = scoreKeys(key, product.key);
+        if (Number.isFinite(product.price) && prices.some(value => Math.round(value * 100) === Math.round(product.price * 100))) score += 0.15;
+        scored.push({ product, score });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      for (const entry of scored.slice(0, 3)) if (entry.score >= 0.5) add(entry.product, entry.score);
+      if (chosen.size >= cap * 2) break;
+    }
+    return [...chosen.values()].sort((a, b) => b.score - a.score).slice(0, cap)
+      .map(({ name, price }) => ({ name, price }));
+  }
+
   function appendNote(existing, extra) {
     return existing ? `${existing} ${extra}` : extra;
   }
@@ -383,10 +430,18 @@
       return result;
     }
     const key = productKey(description);
-    let best = null;
-    for (const product of prepared) {
-      const score = scoreKeys(key, product.key);
-      if (!best || score > best.score) best = { product, score };
+    const scored = prepared.map(product => ({ product, score: scoreKeys(key, product.key) })).sort((a, b) => b.score - a.score);
+    let best = scored[0];
+    const rateValue = parsedRate(result.rate, result.amount, result.quantity);
+    if (rateValue !== null) {
+      // Near-identical names (e.g. same medicine, different strength) are told
+      // apart by the printed rate before the name-only score is trusted.
+      const priced = scored.find(entry => entry.score >= best.score - 0.02 && Number.isFinite(entry.product.price)
+        && Math.round(entry.product.price * 100) === Math.round(rateValue * 100));
+      if (priced && priced !== best) {
+        best = priced;
+        result.note = appendNote(result.note, 'Product chosen by matching the printed rate to your list price.');
+      }
     }
     result.matchScore = best.score;
     if (best.score >= AUTO_MATCH) {
@@ -395,11 +450,11 @@
     } else if (best.score >= SUGGEST_MATCH) {
       result.matchedName = best.product.name;
       result.matchStatus = 'verify';
-      result.note = `Closest match: “${best.product.name}” (${Math.round(best.score * 100)}% similar) — check.`;
+      result.note = appendNote(result.note, `Closest match: “${best.product.name}” (${Math.round(best.score * 100)}% similar) — check.`);
     } else {
       result.matchedName = NOT_FOUND;
       result.matchStatus = 'not-matched';
-      result.note = 'Not found in your product list.';
+      result.note = appendNote(result.note, 'Not found in your product list.');
       return result;
     }
     if (!Number.isFinite(best.product.price)) {
@@ -407,7 +462,6 @@
       result.note = appendNote(result.note, 'No price for this product in your list.');
       return result;
     }
-    const rateValue = parsedRate(result.rate, result.amount, result.quantity);
     if (rateValue === null) {
       result.matchStatus = 'verify';
       result.note = appendNote(result.note, 'Rate not found on the invoice.');
@@ -498,5 +552,5 @@
     ];
   }
 
-  return { cleanText, readableText, textFromPage, analyzeOCR, candidateScore, chooseCandidate, similarity, mergeHybrid, formatBatch, isNotFound, valueOrNotFound, parseAmount, parseDelimitedRows, detectCatalogColumns, detectCatalogTable, catalogFromMatrix, normalizeName, confusionKey, editSimilarity, catalogScore, prepareCatalog, matchInvoice, invoiceExportHeaders, invoiceExportRow };
+  return { cleanText, readableText, textFromPage, analyzeOCR, candidateScore, chooseCandidate, similarity, mergeHybrid, formatBatch, isNotFound, valueOrNotFound, parseAmount, parseDelimitedRows, detectCatalogColumns, detectCatalogTable, catalogFromMatrix, normalizeName, confusionKey, editSimilarity, catalogScore, prepareCatalog, productHints, matchInvoice, invoiceExportHeaders, invoiceExportRow };
 });

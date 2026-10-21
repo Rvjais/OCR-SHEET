@@ -81,9 +81,32 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(result['items'][0]['rate'], 98.0)
         self.assertEqual(result['payable'], {'amount': NOT_FOUND, 'account': NOT_FOUND})
 
+    def test_structure_invoice_passes_the_product_reference_to_the_model(self):
+        parsed = normalize_invoice({})
+        mock = AsyncMock(return_value=parsed)
+        products = [{'name': 'Zinc Syrup', 'price': 98}]
+        with patch('backend.app.parse_invoice_with_deepseek', new=mock):
+            response = self.client.post('/api/structure-invoice', json={'text': 'Zinc Syrup 98', 'products': products})
+        self.assertEqual(response.status_code, 200)
+        mock.assert_awaited_once_with('Zinc Syrup 98', api_key=None, products=products)
+
+    def test_structure_invoice_ignores_a_non_list_product_reference(self):
+        mock = AsyncMock(return_value=normalize_invoice({}))
+        with patch('backend.app.parse_invoice_with_deepseek', new=mock):
+            response = self.client.post('/api/structure-invoice', json={'text': 'Zinc Syrup 98', 'products': {'name': 'Zinc Syrup'}})
+        self.assertEqual(response.status_code, 200)
+        mock.assert_awaited_once_with('Zinc Syrup 98', api_key=None, products=None)
+
     def test_structure_invoice_rejects_empty_text(self):
         response = self.client.post('/api/structure-invoice', json={'text': '   '})
         self.assertEqual(response.status_code, 400)
+
+    def test_product_catalog_sheet_is_served(self):
+        response = self.client.get('/product-catalog.xlsx')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('spreadsheetml', response.headers['content-type'])
+        self.assertGreater(len(response.content), 1000)
+        self.assertEqual(response.content[:2], b'PK')
 
     def test_missing_installed_models_fail_before_any_model_download(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'OCR_MODEL_DIR': folder}):

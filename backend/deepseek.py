@@ -5,6 +5,7 @@ so missing data is explicit instead of blank — on screen, in JSON, CSV and Exc
 """
 import json
 import logging
+import math
 import os
 import re
 
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 NOT_FOUND = "Not found"
+MAX_PROMPT_PRODUCTS = 300
 _BLANK_VALUES = {"not found", "n/a", "na", "nil", "none", "-", "—"}
 
 SYSTEM_PROMPT = """You are an expert invoice data-entry operator. You receive the raw OCR text of one scanned invoice: printed labels, printed values and handwritten values (English, Hindi or mixed scripts). Extract exactly the requested fields.
@@ -115,7 +117,56 @@ def normalize_invoice(raw) -> dict:
     }
 
 
-async def parse_invoice_with_deepseek(text: str, api_key: str = None) -> dict:
+def _product_lines(products) -> list:
+    """Compact reference lines from the uploaded product/price list."""
+    lines = []
+    for product in products if isinstance(products, list) else []:
+        if not isinstance(product, dict):
+            continue
+        name = " ".join(str(product.get("name", "")).split())
+        if not name or len(name) > 160:
+            continue
+        price = product.get("price")
+        if isinstance(price, str):
+            cleaned = re.sub(r"[^\d.-]", "", price)
+            try:
+                price = float(cleaned)
+            except ValueError:
+                price = None
+        if isinstance(price, bool) or not isinstance(price, (int, float)) or not math.isfinite(price):
+            price = None
+        line = f"- {name}"
+        if price is not None:
+            line += f" — ₹{float(price):.2f}"
+        lines.append(line)
+        if len(lines) >= MAX_PROMPT_PRODUCTS:
+            break
+    return lines
+
+
+def build_system_prompt(products=None) -> str:
+    """Base extraction prompt, extended with the store's product reference.
+
+    Sending the relevant names and prices lets the model read handwriting by
+    choosing the catalog product whose name *and* rate the invoice agrees with,
+    instead of guessing a similar-looking spelling.
+    """
+    lines = _product_lines(products)
+    if not lines:
+        return SYSTEM_PROMPT
+    return (
+        SYSTEM_PROMPT
+        + "\nPRODUCT AND PRICE REFERENCE (the store's own product list):\n"
+        + "\n".join(lines)
+        + "\n\nUse this reference to read handwritten or badly scanned product names: when a line clearly refers to a "
+          "reference product, write its exact name in \"description\". Use the reference price as a clue to identify the "
+          "product (similar products may differ only by strength or pack size) — pick the product whose rate matches the "
+          "printed rate. Never change the printed quantity, rate, amount or GST to fit the reference, and never invent a "
+          "product: if the scanned product is not clearly in the reference, keep the printed description exactly as it is."
+    )
+
+
+async def parse_invoice_with_deepseek(text: str, api_key: str = None, products=None) -> dict:
     key = (api_key or os.environ.get("DEEPSEEK_API_KEY", "")).strip()
     if not key:
         from .config import load_server_config
@@ -127,7 +178,7 @@ async def parse_invoice_with_deepseek(text: str, api_key: str = None) -> dict:
     payload = {
         "model": "deepseek-chat",
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": build_system_prompt(products)},
             {"role": "user", "content": f"Here is the raw OCR text of an invoice:\n\n{text}\n\nExtract the requested fields as the JSON object."}
         ],
         "response_format": {"type": "json_object"},
