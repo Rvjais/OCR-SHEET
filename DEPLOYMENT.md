@@ -129,6 +129,8 @@ Success requires a healthy container and an HTTPS health response containing `st
 
 The frontend's API address is in `runtime-config.js`. Vercel must deploy it with `index.html`, `extraction-utils.js` and `product-catalog.xlsx`. The bundled sheet is fetched from the same site; after editing prices in `product-catalog.xlsx`, redeploy the frontend (or restart the local server) for the change to appear.
 
+Prices and names can also be edited at runtime: **View price sheet → Edit sheet** edits the current list in the browser (including an attached sheet), and **Download .xlsx** produces an updated `product-catalog.xlsx`. Replacing the repository file with that download and redeploying makes the edit permanent for every visitor. Until then the edit only exists in that browser; the bundled sheet reloads unchanged on other devices.
+
 ## Logs and rollback
 
 As the deploy user:

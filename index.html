@@ -180,6 +180,18 @@
     .catalog-sheet a:hover { text-decoration: underline; }
     .catalog-sheet .sheet-url { display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
     .catalog-sheet-empty { margin: 0; padding: 32px 20px; color: #6d8073; font-size: 13px; text-align: center; }
+    .catalog-modal-editbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 20px; background: #f7faf8; border-bottom: 1px solid #eef2ef; }
+    .catalog-modal-editbar button { padding: 6px 11px; font-size: 12px; min-height: 32px; }
+    .catalog-edit-status { flex: 1; min-width: 180px; margin: 0; color: #526b5c; font-size: 12px; line-height: 1.45; }
+    .catalog-edit-status.warn { color: #946017; }
+    .catalog-sheet td.sheet-edit-cell { padding: 3px 4px; }
+    .catalog-sheet input.sheet-input { width: 100%; min-width: 84px; padding: 6px 8px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: inherit; font: inherit; }
+    .catalog-sheet input.sheet-input:hover { border-color: #d5e0d9; background: #fff; }
+    .catalog-sheet input.sheet-input:focus { outline: none; border-color: #75c7b2; background: #fff; box-shadow: 0 0 0 3px rgba(117, 199, 178, .22); }
+    .catalog-sheet input.sheet-input.sheet-price-input { text-align: right; font-variant-numeric: tabular-nums; }
+    .catalog-sheet td.sheet-actions-cell { padding: 4px 8px; text-align: right; white-space: nowrap; }
+    .catalog-sheet .sheet-row-delete { padding: 4px 8px; border: 1px solid #e6d2d2; border-radius: 5px; background: #fff; color: #a33a3a; font-size: 11px; }
+    .catalog-sheet .sheet-row-delete:hover { background: #fbecec; }
     @media (max-width: 700px) {
       .nav-catalog span { display: none; }
       .nav-catalog { padding: 9px; }
@@ -288,7 +300,6 @@
         </div>
       </div>
       <div class="catalog-bar" id="catalog-bar">
-        <input type="file" id="catalog-input" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden>
         <div class="catalog-row">
           <button type="button" class="secondary" id="catalog-choose"><svg aria-hidden="true"><use href="#i-upload"/></svg><span id="catalog-choose-label">Upload product list</span></button>
           <span class="catalog-status" id="catalog-status">Loading the bundled product list…</span>
@@ -326,6 +337,7 @@
     </section>
     <footer>For best results, use a clear image and select its text language.</footer>
   </main>
+  <input type="file" id="catalog-input" accept=".csv,.tsv,.txt,.xlsx,.xls" hidden>
   <div class="catalog-modal" id="catalog-modal" hidden>
     <div class="catalog-modal-backdrop" id="catalog-modal-backdrop"></div>
     <div class="catalog-modal-card" role="dialog" aria-modal="true" aria-labelledby="catalog-modal-title">
@@ -342,6 +354,14 @@
           <input type="search" id="catalog-search-input" placeholder="Search product, SKU, price…" aria-label="Search price sheet" autocomplete="off">
         </label>
         <span class="catalog-modal-count" id="catalog-modal-count" aria-live="polite"></span>
+      </div>
+      <div class="catalog-modal-editbar">
+        <button type="button" class="secondary" id="catalog-edit-toggle" aria-pressed="false"><svg aria-hidden="true"><use href="#i-table"/></svg><span id="catalog-edit-label">Edit sheet</span></button>
+        <button type="button" class="secondary" id="catalog-add-row" hidden>Add product row</button>
+        <button type="button" class="secondary" id="catalog-modal-upload"><svg aria-hidden="true"><use href="#i-upload"/></svg><span>Upload list</span></button>
+        <button type="button" class="secondary" id="catalog-download"><svg aria-hidden="true"><use href="#i-download"/></svg><span>Download .xlsx</span></button>
+        <button type="button" class="secondary" id="catalog-reset" hidden>Use bundled sheet</button>
+        <p class="catalog-edit-status" id="catalog-edit-status" role="status" aria-live="polite"></p>
       </div>
       <div class="catalog-modal-body">
         <table class="catalog-sheet" aria-label="Product price sheet">
@@ -1272,6 +1292,10 @@
     let catalogEpoch = 0;
     let bundledCatalogPromise = null;
     let bundledCatalogFailed = false;
+    let bundledCatalogSignature = '';
+    let catalogNotice = '';
+    let catalogEditing = false;
+    let catalogDraftRows = new Set();
     const CATALOG_KEY = 'textlens.catalog.v2';
     const LEGACY_CATALOG_KEY = 'textlens.catalog.v1';
     const BUNDLED_CATALOG_FILE = 'product-catalog.xlsx';
@@ -1282,11 +1306,26 @@
     // version used v1, so they are retired once instead of overriding it.
     try { localStorage.removeItem(LEGACY_CATALOG_KEY); } catch { /* ignore */ }
 
+    // Restore the last working copy: an uploaded list, or edits made to the
+    // bundled sheet in the price-sheet editor. The saved sheet keeps every
+    // column, so SKU, category, variants and URLs survive a reload.
     try {
       const savedCatalog = JSON.parse(localStorage.getItem(CATALOG_KEY) || 'null');
-      if (Array.isArray(savedCatalog?.products) && savedCatalog.products.length) {
+      if (Array.isArray(savedCatalog?.matrix) && savedCatalog.matrix.length) {
+        catalogMatrix = savedCatalog.matrix;
+        catalogMeta = {
+          fileName: String(savedCatalog.fileName || BUNDLED_CATALOG_FILE),
+          updated: String(savedCatalog.updated || ''),
+          headerRow: Number.isInteger(savedCatalog.headerRow) ? savedCatalog.headerRow : 0,
+          nameColumn: Number.isInteger(savedCatalog.nameColumn) ? savedCatalog.nameColumn : 0,
+          priceColumn: Number.isInteger(savedCatalog.priceColumn) ? savedCatalog.priceColumn : -1,
+          source: savedCatalog.source === 'upload' ? 'upload' : 'bundled-edited',
+          baseSignature: String(savedCatalog.baseSignature || '')
+        };
+        productCatalog = Utils.catalogFromMatrix(catalogMatrix, catalogMeta);
+      } else if (Array.isArray(savedCatalog?.products) && savedCatalog.products.length) {
         productCatalog = savedCatalog.products.map(pair => ({ name: String(pair?.[0] ?? '').trim(), price: typeof pair?.[1] === 'number' ? pair[1] : Utils.parseAmount(pair?.[1]) })).filter(product => product.name);
-        catalogMeta = { fileName: String(savedCatalog.fileName || ''), updated: String(savedCatalog.updated || ''), headerRow: 0, nameColumn: 0, priceColumn: -1, source: 'upload' };
+        catalogMeta = { fileName: String(savedCatalog.fileName || ''), updated: String(savedCatalog.updated || ''), headerRow: 0, nameColumn: 0, priceColumn: -1, source: 'upload', baseSignature: '' };
       }
     } catch { /* a corrupted saved list is ignored */ }
 
@@ -1309,14 +1348,23 @@
       try {
         localStorage.setItem(CATALOG_KEY, JSON.stringify({
           products: productCatalog.slice(0, 20000).map(product => [product.name, product.price]),
+          matrix: Array.isArray(catalogMatrix) ? catalogMatrix.slice(0, 20001) : null,
+          headerRow: catalogMeta?.headerRow ?? 0,
+          nameColumn: catalogMeta?.nameColumn ?? 0,
+          priceColumn: catalogMeta?.priceColumn ?? -1,
           fileName: catalogMeta?.fileName || '',
-          updated: catalogMeta?.updated || ''
+          updated: catalogMeta?.updated || '',
+          source: catalogMeta?.source === 'upload' ? 'upload' : 'bundled-edited',
+          baseSignature: catalogMeta?.baseSignature || ''
         }));
       } catch { /* a list too large to persist stays in memory for this session */ }
     }
 
     function loadBundledCatalog({ retry = false } = {}) {
-      if (productCatalog.length) return Promise.resolve();
+      // Local edits to the bundled sheet still need the file once per visit:
+      // if the .xlsx itself changed, the edited file wins over the browser copy.
+      const verifyLocalEdits = catalogMeta?.source === 'bundled-edited' && Array.isArray(catalogMatrix);
+      if (productCatalog.length && !verifyLocalEdits) return Promise.resolve();
       if (bundledCatalogPromise && !retry) return bundledCatalogPromise;
       if (bundledCatalogFailed && !retry) return Promise.resolve();
       const epoch = ++catalogEpoch;
@@ -1331,9 +1379,21 @@
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           if (!sheet) throw new Error('The workbook has no sheets.');
           const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
-          if (epoch !== catalogEpoch || productCatalog.length) return;
+          if (epoch !== catalogEpoch) return;
           if (!Array.isArray(matrix) || !matrix.length) throw new Error('The sheet is empty.');
-          applyCatalogMatrix(matrix, BUNDLED_CATALOG_FILE, { source: 'bundled' });
+          const signature = Utils.catalogSignature(matrix);
+          const bundledChanged = verifyLocalEdits && catalogMeta.baseSignature && catalogMeta.baseSignature !== signature;
+          if (verifyLocalEdits && !bundledChanged) {
+            bundledCatalogSignature = signature;
+            return;
+          }
+          if (productCatalog.length && !verifyLocalEdits) return;
+          bundledCatalogSignature = signature;
+          applyCatalogMatrix(matrix, BUNDLED_CATALOG_FILE, { source: 'bundled', signature });
+          if (bundledChanged) {
+            catalogNotice = `${BUNDLED_CATALOG_FILE} changed, so the updated file is now in use. Earlier in-app edits were replaced.`;
+            catalogStatus(catalogNotice);
+          }
         } catch (error) {
           if (epoch === catalogEpoch && !productCatalog.length) {
             bundledCatalogFailed = true;
@@ -1354,7 +1414,13 @@
     }
 
     function updateCatalogUI() {
-      $('catalog-clear').hidden = !productCatalog.length || catalogMeta?.source === 'bundled';
+      const bundled = catalogMeta?.source === 'bundled';
+      const edited = catalogMeta?.source === 'bundled-edited';
+      $('catalog-clear').hidden = !productCatalog.length || bundled;
+      $('catalog-clear').title = edited
+        ? 'Discard in-app edits and reload product-catalog.xlsx'
+        : 'Remove uploaded list and reload the bundled sheet';
+      $('catalog-clear').setAttribute('aria-label', $('catalog-clear').title);
       $('catalog-choose-label').textContent = productCatalog.length ? 'Replace product list' : 'Upload product list';
       const canView = productCatalog.length > 0 || (Array.isArray(catalogMatrix) && catalogMatrix.length > 0);
       $('catalog-view-nav').disabled = !canView;
@@ -1379,11 +1445,12 @@
         priceSelect.value = String(catalogMeta.priceColumn);
       } else columns.hidden = true;
       if (productCatalog.length) {
-        const bundled = catalogMeta?.source === 'bundled';
-        const updated = !bundled && catalogMeta?.updated ? ` Uploaded ${new Date(catalogMeta.updated).toLocaleDateString()}.` : '';
+        const updated = !bundled && !edited && catalogMeta?.updated ? ` Uploaded ${new Date(catalogMeta.updated).toLocaleDateString()}.` : '';
         const hint = bundled
-          ? 'Edit this sheet in Excel to update names or prices — used to guide extraction and verify rates.'
-          : 'Used to guide extraction and verify rates.';
+          ? 'Open View price sheet to edit names or prices, or edit the .xlsx file in Excel.'
+          : edited
+            ? 'Edited in this browser. The attached .xlsx is unchanged until you download it and replace the file.'
+            : 'Used to guide extraction and verify rates.';
         $('catalog-status').innerHTML = `<strong>${productCatalog.length.toLocaleString()}</strong> products loaded${catalogMeta?.fileName ? ` from ${escapeHtml(catalogMeta.fileName)}` : ''}.${updated} ${hint}`;
         $('catalog-status').classList.remove('warn');
       } else catalogStatus(CATALOG_DEFAULT_STATUS);
@@ -1403,12 +1470,20 @@
         }
         if (!Array.isArray(matrix) || !matrix.length) throw new Error('The file looks empty.');
         applyCatalogMatrix(matrix, file.name);
+        if (!$('catalog-modal').hidden) {
+          catalogEditing = false;
+          catalogDraftRows.clear();
+          $('catalog-search-input').value = '';
+          refreshCatalogSheet();
+          setCatalogEditStatus(`Loaded ${productCatalog.length.toLocaleString()} products from ${file.name}.`);
+        }
       } catch (error) {
         catalogStatus(`Could not read that list: ${error.message}`, true);
+        if (!$('catalog-modal').hidden) setCatalogEditStatus(`Could not read that list: ${error.message}`, true);
       }
     }
 
-    function applyCatalogMatrix(matrix, fileName, { source = 'upload' } = {}) {
+    function applyCatalogMatrix(matrix, fileName, { source = 'upload', signature = '' } = {}) {
       catalogEpoch++;
       catalogMatrix = matrix;
       const detected = Utils.detectCatalogTable(matrix);
@@ -1418,8 +1493,15 @@
         headerRow: detected.headerRow >= 0 ? detected.headerRow : 0,
         nameColumn: detected.nameColumn >= 0 ? detected.nameColumn : 0,
         priceColumn: detected.priceColumn,
-        source
+        source,
+        baseSignature: source === 'bundled' ? signature : ''
       };
+      if (source === 'bundled') {
+        bundledCatalogSignature = signature;
+        // The file itself is now the source of truth, so any older browser
+        // copy of it is obsolete.
+        try { localStorage.removeItem(CATALOG_KEY); } catch { /* ignore */ }
+      }
       rebuildCatalog();
     }
 
@@ -1451,15 +1533,20 @@
       if (Array.isArray(catalogMatrix) && catalogMatrix.length) {
         const headerRow = Math.max(0, Math.min(Number(catalogMeta?.headerRow) || 0, catalogMatrix.length - 1));
         headers = (catalogMatrix[headerRow] || []).map((cell, index) => String(cell ?? '').trim() || `Column ${index + 1}`);
-        rows = catalogMatrix.slice(headerRow + 1).filter(row => Array.isArray(row) && row.some(cell => String(cell ?? '').trim()));
+        rows = [];
+        catalogMatrix.forEach((row, index) => {
+          if (index <= headerRow || !Array.isArray(row)) return;
+          if (!catalogDraftRows.has(index) && !row.some(cell => String(cell ?? '').trim())) return;
+          rows.push({ cells: row, index });
+        });
         priceIndex = Number.isInteger(catalogMeta?.priceColumn) ? catalogMeta.priceColumn : -1;
       } else {
         headers = ['Product Name', 'Price (INR)'];
-        rows = productCatalog.map(product => [product.name, product.price]);
+        rows = productCatalog.map(product => ({ cells: [product.name, product.price], index: -1 }));
         priceIndex = 1;
       }
       let width = headers.length;
-      for (const row of rows) width = Math.max(width, row.length);
+      for (const row of rows) width = Math.max(width, row.cells.length);
       while (headers.length < width) headers.push(`Column ${headers.length + 1}`);
       return { headers, rows, priceIndex };
     }
@@ -1484,12 +1571,19 @@
 
     function renderCatalogSheetHeader() {
       const head = $('catalog-sheet-head');
-      head.replaceChildren(...catalogSheet.headers.map((header, index) => {
+      const cells = catalogSheet.headers.map((header, index) => {
         const th = document.createElement('th');
         th.textContent = header;
         if (index === catalogSheet.priceIndex) th.classList.add('sheet-price-cell');
         return th;
-      }));
+      });
+      if (catalogEditing) {
+        const actions = document.createElement('th');
+        actions.className = 'sheet-actions-cell';
+        actions.textContent = '';
+        cells.push(actions);
+      }
+      head.replaceChildren(...cells);
     }
 
     function catalogRowSearchText(row) {
@@ -1505,18 +1599,43 @@
       if (!catalogSheet) return;
       const query = $('catalog-search-input').value.trim().toLocaleLowerCase();
       const matches = query
-        ? catalogSheet.rows.filter(row => catalogRowSearchText(row).includes(query))
+        ? catalogSheet.rows.filter(row => catalogRowSearchText(row.cells).includes(query))
         : catalogSheet.rows;
       const visible = matches.slice(0, 1000);
       const fragment = document.createDocumentFragment();
-      for (const row of visible) {
+      for (const entry of visible) {
         const tr = document.createElement('tr');
-        catalogSheet.headers.forEach((_, index) => {
+        catalogSheet.headers.forEach((header, index) => {
           const td = document.createElement('td');
-          td.innerHTML = catalogCellMarkup(row[index], index, catalogSheet.priceIndex);
           if (index === catalogSheet.priceIndex) td.classList.add('sheet-price-cell');
+          if (catalogEditing && entry.index >= 0) {
+            td.classList.add('sheet-edit-cell');
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = index === catalogSheet.priceIndex ? 'sheet-input sheet-price-input' : 'sheet-input';
+            input.value = entry.cells[index] ?? '';
+            input.dataset.row = String(entry.index);
+            input.dataset.col = String(index);
+            input.setAttribute('aria-label', `${header} for row ${entry.index}`);
+            if (index === catalogSheet.priceIndex) input.inputMode = 'decimal';
+            td.append(input);
+          } else {
+            td.innerHTML = catalogCellMarkup(entry.cells[index], index, catalogSheet.priceIndex);
+          }
           tr.append(td);
         });
+        if (catalogEditing && entry.index >= 0) {
+          const td = document.createElement('td');
+          td.className = 'sheet-actions-cell';
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'sheet-row-delete';
+          button.dataset.delete = String(entry.index);
+          button.setAttribute('aria-label', `Delete row ${entry.index}`);
+          button.textContent = 'Delete';
+          td.append(button);
+          tr.append(td);
+        }
         fragment.append(tr);
       }
       $('catalog-sheet-body').replaceChildren(fragment);
@@ -1529,20 +1648,202 @@
       $('catalog-modal-count').textContent = count;
     }
 
+    function setCatalogEditStatus(text, warn = false) {
+      $('catalog-edit-status').textContent = text;
+      $('catalog-edit-status').classList.toggle('warn', warn);
+    }
+
+    function updateCatalogModalMeta() {
+      const fileName = catalogMeta?.fileName || 'Product list';
+      const sourceText = catalogMeta?.source === 'bundled'
+        ? 'Bundled with the app'
+        : catalogMeta?.source === 'bundled-edited'
+          ? 'Bundled sheet, edited in this browser'
+          : 'Uploaded in this browser';
+      $('catalog-modal-meta').textContent = `${fileName} · ${sourceText}`;
+    }
+
+    function updateCatalogModalControls() {
+      const hasMatrix = Array.isArray(catalogMatrix) && catalogMatrix.length > 0;
+      $('catalog-edit-toggle').hidden = !hasMatrix;
+      $('catalog-edit-toggle').setAttribute('aria-pressed', String(catalogEditing));
+      $('catalog-edit-label').textContent = catalogEditing ? 'Done editing' : 'Edit sheet';
+      $('catalog-add-row').hidden = !catalogEditing;
+      $('catalog-download').disabled = !(hasMatrix || productCatalog.length);
+      $('catalog-reset').hidden = !(hasMatrix || productCatalog.length) || catalogMeta?.source === 'bundled';
+    }
+
+    function refreshCatalogSheet() {
+      catalogSheet = buildCatalogSheet();
+      renderCatalogSheetHeader();
+      renderCatalogSheet();
+      updateCatalogModalMeta();
+      updateCatalogModalControls();
+    }
+
+    // Older saved lists kept only [name, price]; rebuild a full sheet so they
+    // can be edited and downloaded too.
+    function ensureCatalogMatrix() {
+      if (Array.isArray(catalogMatrix) && catalogMatrix.length) return true;
+      if (!productCatalog.length) return false;
+      catalogMatrix = [['Product Name', 'Price (INR)'], ...productCatalog.map(product => [product.name, product.price])];
+      catalogMeta = {
+        fileName: catalogMeta?.fileName || BUNDLED_CATALOG_FILE,
+        updated: catalogMeta?.updated || '',
+        headerRow: 0,
+        nameColumn: 0,
+        priceColumn: 1,
+        source: catalogMeta?.source === 'upload' ? 'upload' : 'bundled-edited',
+        baseSignature: catalogMeta?.baseSignature || ''
+      };
+      return true;
+    }
+
+    function markCatalogEdited() {
+      if (!catalogMeta) return;
+      if (catalogMeta.source === 'bundled') {
+        catalogMeta.source = 'bundled-edited';
+        catalogMeta.baseSignature = bundledCatalogSignature || '';
+      }
+    }
+
+    function setCatalogEditing(editing) {
+      catalogEditing = Boolean(editing);
+      renderCatalogSheetHeader();
+      renderCatalogSheet();
+      updateCatalogModalControls();
+      if (catalogEditing) {
+        setCatalogEditStatus('Click any cell to change it. Edits apply immediately and are saved in this browser.');
+      } else if (catalogMeta?.source === 'bundled-edited') {
+        setCatalogEditStatus('Edits are saved in this browser. Download the .xlsx and replace product-catalog.xlsx to make them permanent.');
+      } else setCatalogEditStatus('');
+    }
+
+    function updateCatalogCell(rowIndex, columnIndex, value) {
+      const row = Array.isArray(catalogMatrix) ? catalogMatrix[rowIndex] : null;
+      if (!Array.isArray(row) || !catalogMeta) return;
+      while (row.length <= columnIndex) row.push('');
+      row[columnIndex] = String(value ?? '');
+      catalogDraftRows.delete(rowIndex);
+      markCatalogEdited();
+      rebuildCatalog();
+      updateCatalogModalControls();
+      setCatalogEditStatus(productCatalog.length
+        ? `${productCatalog.length.toLocaleString()} products in use. Edits are saved in this browser.`
+        : 'That row has no product name, so it is not used until you type one.', !productCatalog.length);
+    }
+
+    function addCatalogRow() {
+      if (!Array.isArray(catalogMatrix) || !catalogMeta) return;
+      const width = Math.max(1, catalogSheet?.headers.length || 1);
+      const index = catalogMatrix.length;
+      catalogMatrix.push(Array.from({ length: width }, () => ''));
+      catalogDraftRows.add(index);
+      markCatalogEdited();
+      rebuildCatalog();
+      $('catalog-search-input').value = '';
+      refreshCatalogSheet();
+      setCatalogEditStatus('New row added. Type the product name and price — the row saves as you go.');
+      const column = Math.max(0, catalogMeta.nameColumn);
+      requestAnimationFrame(() => {
+        const input = $('catalog-sheet-body').querySelector(`input.sheet-input[data-row="${index}"][data-col="${column}"]`);
+        input?.scrollIntoView({ block: 'nearest' });
+        input?.focus();
+      });
+    }
+
+    function deleteCatalogRow(index) {
+      if (!Array.isArray(catalogMatrix) || !Array.isArray(catalogMatrix[index])) return;
+      catalogMatrix.splice(index, 1);
+      catalogDraftRows.clear();
+      markCatalogEdited();
+      rebuildCatalog();
+      refreshCatalogSheet();
+      setCatalogEditStatus(catalogMeta?.source === 'bundled-edited'
+        ? 'Row deleted. Download the .xlsx to make the change permanent.'
+        : 'Row deleted. The change is saved in this browser.');
+    }
+
+    async function downloadCatalogWorkbook() {
+      const button = $('catalog-download');
+      if (button.disabled) return;
+      button.disabled = true;
+      setCatalogEditStatus('Preparing the Excel file…');
+      try {
+        const XLSX = await withTimeout(loadXLSX(), 'Loading Excel tools', 30000);
+        const sheetData = buildCatalogSheet();
+        const rows = sheetData.rows.map(entry => {
+          const cells = Array.from({ length: sheetData.headers.length }, (_, index) => entry.cells[index] ?? '');
+          if (sheetData.priceIndex >= 0) {
+            const amount = Utils.parseAmount(cells[sheetData.priceIndex]);
+            if (amount !== null && Number.isFinite(amount)) cells[sheetData.priceIndex] = amount;
+          }
+          return cells;
+        }).filter(cells => cells.some(cell => String(cell ?? '').trim()));
+        const sheet = XLSX.utils.aoa_to_sheet([sheetData.headers, ...rows]);
+        sheet['!cols'] = sheetData.headers.map((header, index) => ({
+          wch: index <= 1 ? (index === 0 ? 52 : 14) : Math.max(16, Math.min(60, String(header).length + 24))
+        }));
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, 'Products');
+        const readme = XLSX.utils.aoa_to_sheet([
+          ['Instax product and price list'],
+          [],
+          [`${rows.length} products, prices in Indian rupees (INR). Saved from the app on ${new Date().toLocaleDateString()}.`],
+          [],
+          ['How to update:'],
+          ['1. Edit the Product Name or Price (INR) cell, or add a new row under the last product.'],
+          ['2. Keep the Product Name and Price (INR) headers unchanged.'],
+          ['3. Save this file as product-catalog.xlsx next to index.html, then reload the app.'],
+          ['4. For the deployed site, redeploy the frontend so it serves the new file.'],
+          [],
+          ['The app uses these names and prices to guide extraction and verify scanned rates.']
+        ]);
+        XLSX.utils.book_append_sheet(workbook, readme, 'Read Me');
+        XLSX.writeFile(workbook, BUNDLED_CATALOG_FILE);
+        setCatalogEditStatus('Downloaded product-catalog.xlsx. Replace the attached file with it (and redeploy the site) to make the change permanent.');
+      } catch (error) {
+        setCatalogEditStatus(`Could not create the Excel file: ${error.message}`, true);
+      } finally {
+        updateCatalogModalControls();
+      }
+    }
+
+    async function resetToBundledCatalog() {
+      productCatalog = []; catalogMeta = null; catalogMatrix = null;
+      catalogDraftRows.clear();
+      catalogEditing = false;
+      catalogEpoch++;
+      bundledCatalogFailed = false;
+      try { localStorage.removeItem(CATALOG_KEY); } catch { /* ignore */ }
+      updateCatalogUI();
+      refreshMatches();
+      await loadBundledCatalog({ retry: true });
+      if (!$('catalog-modal').hidden) {
+        refreshCatalogSheet();
+        setCatalogEditStatus(productCatalog.length ? 'Reloaded product-catalog.xlsx from the app.' : 'The bundled sheet could not be reloaded.', !productCatalog.length);
+      }
+    }
+
     async function openCatalogSheet(opener) {
       if (!productCatalog.length && !catalogMatrix && !bundledCatalogFailed) await loadBundledCatalog();
+      ensureCatalogMatrix();
       const available = productCatalog.length > 0 || (Array.isArray(catalogMatrix) && catalogMatrix.length > 0);
       if (!available) {
         catalogStatus('No product list is loaded yet. Upload an Excel/CSV list or check the bundled sheet.', true);
         return;
       }
-      catalogSheet = buildCatalogSheet();
-      renderCatalogSheetHeader();
+      catalogEditing = false;
+      catalogDraftRows.clear();
       $('catalog-search-input').value = '';
-      renderCatalogSheet();
-      const fileName = catalogMeta?.fileName || 'Product list';
-      const sourceText = catalogMeta?.source === 'bundled' ? 'Bundled with the app' : catalogMeta?.source === 'upload' ? 'Uploaded in this browser' : 'Current product list';
-      $('catalog-modal-meta').textContent = `${fileName} · ${sourceText}`;
+      refreshCatalogSheet();
+      setCatalogEditStatus(catalogMeta?.source === 'bundled-edited'
+        ? 'This sheet was edited in this browser. Download the .xlsx to update the attached file.'
+        : '');
+      if (catalogNotice) {
+        setCatalogEditStatus(catalogNotice);
+        catalogNotice = '';
+      }
       catalogModalOpener = opener || document.activeElement;
       catalogModalBodyOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
@@ -1555,26 +1856,37 @@
       $('catalog-modal').hidden = true;
       document.body.style.overflow = catalogModalBodyOverflow;
       $('catalog-search-input').value = '';
+      catalogEditing = false;
       catalogSheet = null;
+      setCatalogEditStatus('');
       const opener = catalogModalOpener;
       catalogModalOpener = null;
       opener?.focus?.();
     }
 
     $('catalog-choose').addEventListener('click', () => $('catalog-input').click());
+    $('catalog-modal-upload').addEventListener('click', () => $('catalog-input').click());
     $('catalog-input').addEventListener('change', (event) => {
       const file = event.target.files[0];
       event.target.value = '';
       if (file) handleCatalogFile(file);
     });
-    $('catalog-clear').addEventListener('click', () => {
-      productCatalog = []; catalogMeta = null; catalogMatrix = null;
-      catalogEpoch++;
-      bundledCatalogFailed = false;
-      try { localStorage.removeItem(CATALOG_KEY); } catch { /* ignore */ }
-      updateCatalogUI();
-      refreshMatches();
-      loadBundledCatalog({ retry: true });
+    $('catalog-clear').addEventListener('click', resetToBundledCatalog);
+    $('catalog-reset').addEventListener('click', resetToBundledCatalog);
+    $('catalog-edit-toggle').addEventListener('click', () => setCatalogEditing(!catalogEditing));
+    $('catalog-add-row').addEventListener('click', addCatalogRow);
+    $('catalog-download').addEventListener('click', downloadCatalogWorkbook);
+    $('catalog-sheet-body').addEventListener('change', (event) => {
+      const input = event.target.closest?.('input.sheet-input');
+      if (!input) return;
+      updateCatalogCell(Number(input.dataset.row), Number(input.dataset.col), input.value);
+    });
+    $('catalog-sheet-body').addEventListener('click', (event) => {
+      const button = event.target.closest?.('button[data-delete]');
+      if (!button) return;
+      const index = Number(button.dataset.delete);
+      if (!window.confirm('Delete this product row from the list?')) return;
+      deleteCatalogRow(index);
     });
     $('catalog-name-column').addEventListener('change', applyCatalogColumns);
     $('catalog-price-column').addEventListener('change', applyCatalogColumns);
@@ -1813,7 +2125,9 @@
     }
 
     updateCatalogUI();
-    if (!productCatalog.length) loadBundledCatalog();
+    // Always check the attached .xlsx on startup: if it changed, the file wins
+    // over edits that were made inside the browser.
+    if (!productCatalog.length || catalogMeta?.source === 'bundled-edited') loadBundledCatalog();
   </script>
 </body>
 </html>

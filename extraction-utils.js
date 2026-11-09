@@ -182,9 +182,14 @@
     if (!text) return null;
     const lastDot = text.lastIndexOf('.'), lastComma = text.lastIndexOf(',');
     const decimal = lastDot > lastComma ? '.' : lastComma > lastDot ? ',' : '';
-    if (decimal) {
+    const singleSeparator = lastDot < 0 || lastComma < 0;
+    const fraction = decimal ? text.slice(text.lastIndexOf(decimal) + 1).replace(/[.,]/g, '') : '';
+    // A lone comma followed by exactly three digits is a thousands separator
+    // ("6,499" is a rupee price), not a decimal comma ("45,5").
+    if (decimal && singleSeparator && decimal === ',' && /^\d{3}$/.test(fraction)) {
+      text = text.replace(/[.,]/g, '');
+    } else if (decimal) {
       const integer = text.slice(0, text.lastIndexOf(decimal)).replace(/[.,]/g, '');
-      const fraction = text.slice(text.lastIndexOf(decimal) + 1).replace(/[.,]/g, '');
       text = `${integer}.${fraction}`;
     } else text = text.replace(/[.,]/g, '');
     const number = Number(text);
@@ -259,6 +264,18 @@
       if (products.length >= 20000) break;
     }
     return products;
+  }
+
+  // Fingerprints a whole sheet so the app can tell whether the attached
+  // product-catalog.xlsx was edited outside the browser since the last visit.
+  function catalogSignature(matrix) {
+    const text = JSON.stringify(Array.isArray(matrix) ? matrix : []);
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index++) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `${text.length.toString(36)}-${(hash >>> 0).toString(36)}`;
   }
 
   function normalizeName(text) {
@@ -552,5 +569,5 @@
     ];
   }
 
-  return { cleanText, readableText, textFromPage, analyzeOCR, candidateScore, chooseCandidate, similarity, mergeHybrid, formatBatch, isNotFound, valueOrNotFound, parseAmount, parseDelimitedRows, detectCatalogColumns, detectCatalogTable, catalogFromMatrix, normalizeName, confusionKey, editSimilarity, catalogScore, prepareCatalog, productHints, matchInvoice, invoiceExportHeaders, invoiceExportRow };
+  return { cleanText, readableText, textFromPage, analyzeOCR, candidateScore, chooseCandidate, similarity, mergeHybrid, formatBatch, isNotFound, valueOrNotFound, parseAmount, parseDelimitedRows, detectCatalogColumns, detectCatalogTable, catalogFromMatrix, catalogSignature, normalizeName, confusionKey, editSimilarity, catalogScore, prepareCatalog, productHints, matchInvoice, invoiceExportHeaders, invoiceExportRow };
 });

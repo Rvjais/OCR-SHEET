@@ -43,6 +43,7 @@ jobs:
             sleep 1
           done
           TEXTLENS_BROWSER=chromium npm run test:long-pdf
+          TEXTLENS_BROWSER=chromium npm run test:catalog
       - name: Check deployment scripts
         run: |
           if ! command -v shellcheck >/dev/null; then

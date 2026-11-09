@@ -115,6 +115,51 @@ test('product list parsing reads quoted CSV, detects columns and prices', () => 
   ]);
 });
 
+test('prices typed into a sheet keep thousands and decimal separators correct', () => {
+  assert.equal(U.parseAmount('6,499'), 6499);
+  assert.equal(U.parseAmount('1,23,456'), 123456);
+  assert.equal(U.parseAmount('₹1,234.50'), 1234.5);
+  assert.equal(U.parseAmount('45,5'), 45.5);
+  assert.equal(U.parseAmount(' 999 '), 999);
+  assert.equal(U.parseAmount('Not found'), null);
+});
+
+test('a sheet signature changes when an attached price or name is edited', () => {
+  const rows = [
+    ['Product Name', 'Price (INR)', 'SKU'],
+    ['Instax Mini 12 Camera', 6999, 'A1'],
+    ['Instax Mini 99 - Silver', 17999, 'B2']
+  ];
+  const signature = U.catalogSignature(rows);
+  assert.equal(U.catalogSignature(rows.map(row => [...row])), signature, 'identical sheets share a signature');
+  const priceEdit = rows.map(row => [...row]);
+  priceEdit[1][1] = 6499;
+  assert.notEqual(U.catalogSignature(priceEdit), signature, 'a changed price is detected');
+  const nameEdit = rows.map(row => [...row]);
+  nameEdit[2][0] = 'Instax Mini 99 - Graphite';
+  assert.notEqual(U.catalogSignature(nameEdit), signature, 'a changed name is detected');
+  const extraColumn = rows.map((row, index) => index ? [...row, ''] : [...row, 'Category']);
+  assert.notEqual(U.catalogSignature(extraColumn), signature, 'a changed column is detected');
+  assert.equal(U.catalogSignature(undefined), U.catalogSignature([]), 'missing sheets are safe');
+});
+
+test('only name and price columns drive matching after a sheet is edited', () => {
+  const edited = [
+    ['Product Name', 'Price (INR)', 'SKU', 'Notes'],
+    ['Instax Mini 12 Camera', '6,499', 'A1', 'edited price'],
+    ['New Product Row', 250, '', 'added in the app']
+  ];
+  const detected = U.detectCatalogTable(edited);
+  const catalog = U.catalogFromMatrix(edited, detected);
+  assert.deepEqual(catalog, [
+    { name: 'Instax Mini 12 Camera', price: 6499 },
+    { name: 'New Product Row', price: 250 }
+  ]);
+  const match = U.matchInvoice({ items: [{ description: 'Instax Mini 12 Camera', quantity: 1, rate: 6499, amount: 6499 }] }, catalog);
+  assert.equal(match.items[0].matchStatus, 'matched');
+  assert.equal(match.items[0].matchedName, 'Instax Mini 12 Camera');
+});
+
 test('column detection prefers a product name header over an item code', () => {
   const detected = U.detectCatalogColumns(['Item Code', 'Product Name', 'Rate (₹)']);
   assert.equal(detected.nameColumn, 1);

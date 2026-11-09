@@ -202,10 +202,11 @@ def write_workbook(rows, output):
         f"{len(rows)} products, prices in Indian rupees (INR). Generated from instax.in on {date.today().isoformat()}.",
         "",
         "How to update:",
-        "1. Edit the Price (INR) column, or add a new row under the Products sheet.",
-        "2. Keep the Product Name and Price (INR) headers unchanged — extra columns are ignored.",
+        "1. Edit the Product Name or Price (INR) cell, or add a new row under the Products sheet.",
+        "2. Keep the Product Name and Price (INR) headers unchanged — every other column is kept as it is.",
         "3. Save this file, then reload the app. For the deployed site, redeploy the frontend so it serves the new file.",
-        "4. The app uses these names and prices to guide extraction and verify scanned rates.",
+        "4. You can also edit any cell in the app: View price sheet -> Edit sheet -> Download .xlsx, then replace this file.",
+        "5. The app uses these names and prices to guide extraction and verify scanned rates.",
         "",
         "Notes:",
         "• Products with variants priced differently (for example Mini 99 Black/Silver) have one row per price.",
@@ -216,7 +217,7 @@ def write_workbook(rows, output):
     for offset, line in enumerate(lines, start=2):
         readme.cell(row=offset, column=1, value=line)
     readme["A5"].font = Font(bold=True)
-    readme["A11"].font = Font(bold=True)
+    readme["A12"].font = Font(bold=True)
 
     workbook.save(output)
 
